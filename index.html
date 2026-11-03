@@ -26,6 +26,8 @@
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
     --sat: env(safe-area-inset-top, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   /* lock the page: no rubber-banding, no pinch, no selection, no callouts */
@@ -49,7 +51,7 @@
     position: fixed; inset: 0;
     display: grid;
     grid-template-rows: auto 1fr auto;
-    padding: calc(var(--sat) + 8px) 16px calc(var(--sab) + 16px);
+    padding: calc(var(--sat) + 8px) calc(var(--sar) + 16px) calc(var(--sab) + 16px) calc(var(--sal) + 16px);
   }
 
   /* top bar */
@@ -68,21 +70,68 @@
   .brand b { color: var(--accent); }
 
   /* viewfinder */
-  .stage { position: relative; display: grid; place-items: center; min-height: 0; }
+  /* the frame always fits its box at the capture aspect (--ar = w/h), whatever the orientation */
+  .stage { position: relative; display: grid; place-items: center; min-height: 0; min-width: 0; container-type: size; }
   .finder {
     position: relative;
-    aspect-ratio: 3 / 4;
-    max-width: 100%; max-height: 100%;
-    width: 100%;
+    aspect-ratio: var(--ar, 0.75);
+    width: min(100cqw, calc(100cqh * var(--ar, 0.75)));
     border-radius: 22px; overflow: hidden;
     background: #111;
+    touch-action: none;
   }
-  @supports not (aspect-ratio: 3/4) { .finder { height: 0; padding-top: 133.33%; } }
   .finder video {
     position: absolute; inset: 0; width: 100%; height: 100%;
     object-fit: cover;
+    transform: scale(var(--dz, 1));
   }
-  .finder video.mirror { transform: scaleX(-1); }
+  .finder video.mirror { transform: scaleX(-1) scale(var(--dz, 1)); }
+
+  /* lens + zoom pills, iOS-camera style */
+  .lenses {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 4px; border-radius: 22px;
+    background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    transition: opacity 200ms ease;
+  }
+  .lenses:empty { display: none; }
+  .lenses button {
+    min-width: 36px; height: 36px; padding: 0 8px; border-radius: 18px;
+    font-size: 12px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums;
+    background: rgba(255,255,255,.12);
+    transition: transform 160ms var(--ease-out), background-color 200ms ease, color 200ms ease;
+  }
+  .lenses button:active { transform: scale(0.92); }
+  .lenses button[aria-pressed=true] { color: var(--accent); background: rgba(0,0,0,.55); }
+  .zoomtag {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.96);
+    padding: 8px 14px; border-radius: 16px; font-size: 20px; font-weight: 700;
+    background: rgba(0,0,0,.5); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    opacity: 0; pointer-events: none; font-variant-numeric: tabular-nums;
+    transition: opacity 200ms ease, transform 200ms var(--ease-out);
+  }
+  .zoomtag.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+  /* onion skin: last shot over the live view so the next one lines up */
+  .onion {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    opacity: 0; pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+  .onion.on { opacity: .5; }
+  .ghostbtn {
+    position: absolute; top: 12px; right: 12px;
+    width: 32px; height: 32px; border-radius: 10px;
+    display: grid; place-items: center;
+    background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border: 2px solid rgba(255,255,255,.7);
+    color: transparent;
+    transition: transform 160ms var(--ease-out), background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+  }
+  .ghostbtn svg { width: 18px; height: 18px; }
+  .ghostbtn:active { transform: scale(0.9); }
+  .ghostbtn[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #000; }
+  .ghostbtn[hidden] { display: none; }
   .flash {
     position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none;
     transition: opacity 260ms var(--ease-out);
@@ -106,7 +155,7 @@
   .gate .go:active { transform: scale(0.96); }
   .gate .go[hidden] { display: none; }
   .hint {
-    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
     padding: 6px 12px; border-radius: 14px; font-size: 13px; white-space: nowrap;
     background: rgba(0,0,0,.45); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
     transition: opacity 200ms ease;
@@ -150,6 +199,7 @@
     transition: transform 140ms var(--ease-out);
   }
   .shutter:active i { transform: scale(0.88); }
+  .shutter.burst i { transform: scale(0.7); background: var(--accent); transition: transform 200ms var(--ease-out), background-color 150ms ease; }
   .shutter:disabled { opacity: .35; }
 
   .side { justify-self: end; position: relative; width: 56px; height: 56px; }
@@ -171,7 +221,7 @@
   .sheet {
     position: fixed; inset: 0; z-index: 10;
     display: grid; grid-template-rows: auto 1fr auto;
-    padding: calc(var(--sat) + 8px) 16px calc(var(--sab) + 16px);
+    padding: calc(var(--sat) + 8px) calc(var(--sar) + 16px) calc(var(--sab) + 16px) calc(var(--sal) + 16px);
     background: #0b0b0c;
     transform: translateY(100%);
     transition: transform 420ms var(--ease-drawer);
@@ -179,9 +229,11 @@
   }
   .sheet.open { transform: translateY(0); visibility: visible; }
   .sheet.closing { visibility: visible; }
-  .preview { position: relative; display: grid; place-items: center; min-height: 0; padding: 4px 0 14px; }
+  .preview { position: relative; min-height: 0; min-width: 0; margin: 4px 0 14px; display: grid; place-items: center; container-type: size; }
   .preview .frame {
-    position: relative; aspect-ratio: 3/4; max-height: 100%; max-width: 100%; height: 100%;
+    position: relative;
+    aspect-ratio: var(--ar, 0.75);
+    width: min(100cqw, calc(100cqh * var(--ar, 0.75)));
     border-radius: 18px; overflow: hidden; background: #161617;
   }
   .preview img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; -webkit-touch-callout: default; }
@@ -256,8 +308,26 @@
     .sheet.open { opacity: 1; }
     .stack .thumb.enter { transform: none; }
   }
-  /* short landscape phones: keep it from overflowing */
-  @media (max-height: 520px) { .bar { height: 84px; } .shutter { width: 66px; height: 66px; } }
+  /* landscape phones: chrome moves to the sides, like the native camera */
+  @media (orientation: landscape) and (max-height: 600px) {
+    #app { grid-template-rows: 1fr; grid-template-columns: 44px 1fr 96px; column-gap: 12px; padding-top: calc(var(--sat) + 12px); padding-bottom: calc(var(--sab) + 12px); }
+    #app > .top { flex-direction: column; height: auto; width: 44px; }
+    #app > .top .brand { display: none; }
+    .bar { height: auto; padding: 0; grid-template-columns: 1fr; grid-template-rows: 1fr auto 1fr; justify-items: center; }
+    .side { grid-row: 1; justify-self: center; align-self: start; }
+    .shutter { grid-row: 2; width: 72px; height: 72px; }
+    .stack { grid-row: 3; justify-self: center; align-self: end; }
+
+    .sheet {
+      grid-template-columns: 1fr minmax(280px, 340px); grid-template-rows: auto 1fr; column-gap: 20px;
+      grid-template-areas: "top top" "preview controls";
+      padding-top: calc(var(--sat) + 8px); padding-bottom: calc(var(--sab) + 12px);
+    }
+    .sheet > .top { grid-area: top; height: 40px; }
+    .preview { grid-area: preview; margin: 4px 0 0; }
+    .controls { grid-area: controls; align-content: center; gap: 12px; }
+    .btn { height: 46px; }
+  }
 </style>
 </head>
 <body>
@@ -277,6 +347,12 @@
       <video id="video" playsinline muted autoplay></video>
       <div class="flash" id="flash"></div>
       <div class="hint" id="hint">take at least 2</div>
+      <img class="onion" id="ghost" alt="">
+      <button class="ghostbtn" id="ghostBtn" aria-pressed="true" aria-label="Overlay last photo" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      </button>
+      <div class="lenses" id="lenses"></div>
+      <div class="zoomtag" id="zoomtag">1×</div>
       <div class="gate" id="gate">
         <h1>Snap. Snap. Loop.</h1>
         <p id="gateMsg">take a few photos, get a GIF in your camera roll.</p>
@@ -334,9 +410,9 @@
         <div class="lab"><span>Size</span></div>
         <div class="seg" id="size" role="radiogroup" style="--n:3">
           <div class="pill"></div>
-          <button role="radio" data-v="240">S</button>
-          <button role="radio" data-v="360">M</button>
-          <button role="radio" data-v="480">L</button>
+          <button role="radio" data-v="320">S</button>
+          <button role="radio" data-v="480">M</button>
+          <button role="radio" data-v="640">L</button>
         </div>
       </div>
     </div>
@@ -358,19 +434,28 @@ import { GIFEncoder, quantize, applyPalette } from 'https://unpkg.com/gifenc@1.0
 const $ = (id) => document.getElementById(id);
 const video = $('video'), shutter = $('shutter'), side = $('side');
 const MAX_SHOTS = 40;
-const CAP_W = 480, CAP_H = 640; // stored frame size (3:4)
+const CAP_LONG = 640, CAP_SHORT = 480; // stored frame size, 4:3 either way up
+const DIGITAL_MAX = 5;
+const landscapeMQ = matchMedia('(orientation: landscape)');
 
 const state = {
   stream: null,
   facing: 'environment',
-  shots: [],            // canvases at CAP_W x CAP_H
+  deviceId: null,
+  cams: [],             // [{id, facing, kind, label}]
+  zoom: 1,
+  zoomCap: null,        // {min, max} when the track zooms in hardware
+  ar: 0.75,             // capture aspect (w/h), locked once the first shot exists
+  ghost: true,
+  shots: [],            // canvases
   delay: 200,           // ms between frames
   mode: 'loop',
-  width: 360,
+  width: 480,           // long side of the gif
   file: null,
   url: null,
   job: 0,
 };
+try { state.ghost = localStorage.getItem('loopshot.ghost') !== '0'; } catch {}
 
 /* ---------- page lock (belt + braces for mobile webkit) ---------- */
 document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
@@ -395,17 +480,31 @@ async function startCamera() {
     return;
   }
   stopCamera();
+  const size = { width: { ideal: 1920 }, height: { ideal: 1920 } };
   try {
     state.stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { facingMode: { ideal: state.facing }, width: { ideal: 1280 }, height: { ideal: 1280 } },
+      video: state.deviceId
+        ? { deviceId: { exact: state.deviceId }, ...size }
+        : { facingMode: { ideal: state.facing }, ...size },
     });
+    const track = state.stream.getVideoTracks()[0];
+    const s = track.getSettings?.() || {};
+    state.deviceId = s.deviceId || state.deviceId;
+    if (s.facingMode) state.facing = s.facingMode === 'user' ? 'user' : 'environment';
+    const cap = track.getCapabilities?.() || {};
+    state.zoomCap = cap.zoom && cap.zoom.max > cap.zoom.min ? { min: cap.zoom.min, max: cap.zoom.max } : null;
+    state.zoom = state.zoomCap ? Math.max(1, state.zoomCap.min) : 1;
+    applyZoom(true);
     video.srcObject = state.stream;
     video.classList.toggle('mirror', state.facing === 'user');
     await video.play().catch(() => {});
     $('gate').classList.add('gone');
     shutter.disabled = false;
+    await listCams();
+    renderLenses();
   } catch (err) {
+    if (state.deviceId && err?.name === 'OverconstrainedError') { state.deviceId = null; return startCamera(); }
     const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
     $('gateMsg').textContent = denied
       ? 'camera access was blocked. allow it in your browser’s site settings, then tap below.'
@@ -423,7 +522,128 @@ function stopCamera() {
 $('allow').addEventListener('click', startCamera);
 $('flip').addEventListener('click', () => {
   state.facing = state.facing === 'user' ? 'environment' : 'user';
+  state.deviceId = null;
   startCamera();
+});
+
+/* ---------- lenses ---------- */
+// labels only exist after permission. iOS names them ("Back Ultra Wide Camera" etc.);
+// android mostly doesn't, so unknown back cameras just get numbered.
+async function listCams() {
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+  state.cams = devs.flatMap((d) => {
+    const l = d.label || '';
+    if (/dual|triple|desk view/i.test(l)) return []; // virtual multi-cams switch lenses on their own
+    const facing = /front|user|facing front|face ?time/i.test(l) ? 'user' : 'environment';
+    const kind = /ultra/i.test(l) ? 'ultra' : /tele/i.test(l) ? 'tele' : 'wide';
+    return [{ id: d.deviceId, facing, kind, label: l }];
+  });
+}
+function renderLenses() {
+  const box = $('lenses');
+  box.textContent = '';
+  const mine = state.cams.filter((c) => c.facing === state.facing);
+  const order = { ultra: 0, wide: 1, tele: 2 };
+  const named = mine.every((c) => c.label) && new Set(mine.map((c) => c.kind)).size === mine.length;
+  const zoomLabel = () => `${state.zoom < 10 ? state.zoom.toFixed(1).replace(/\.0$/, '') : Math.round(state.zoom)}×`;
+
+  if (mine.length > 1) {
+    const list = named ? [...mine].sort((a, b) => order[a.kind] - order[b.kind]) : mine;
+    list.forEach((c, i) => {
+      const b = document.createElement('button');
+      const on = c.id === state.deviceId;
+      b.setAttribute('aria-pressed', on);
+      b.setAttribute('aria-label', c.label || `camera ${i + 1}`);
+      b.textContent = on && state.zoom !== 1 ? zoomLabel()
+        : named ? { ultra: '.5', wide: '1×', tele: 'tele' }[c.kind] : `${i + 1}`;
+      b.addEventListener('click', () => {
+        if (c.id === state.deviceId) { setZoom(1); return; }
+        state.deviceId = c.id; startCamera();
+      });
+      box.appendChild(b);
+    });
+  } else {
+    // one lens: offer zoom presets instead
+    [1, 2, 3].forEach((z) => {
+      const b = document.createElement('button');
+      const on = Math.abs(state.zoom - z) < 0.05 || (z === 1 && state.zoom < 1.5) || (z === 2 && state.zoom >= 1.5 && state.zoom < 2.5) || (z === 3 && state.zoom >= 2.5);
+      b.setAttribute('aria-pressed', on);
+      b.textContent = on ? zoomLabel() : `${z}`;
+      b.addEventListener('click', () => setZoom(z));
+      box.appendChild(b);
+    });
+  }
+}
+
+/* ---------- zoom ---------- */
+// hardware zoom where the browser exposes it (chrome android, newer safari), otherwise a digital crop
+let zoomRaf = 0, zoomTagT;
+function zoomMax() { return state.zoomCap ? Math.min(state.zoomCap.max, 10) : DIGITAL_MAX; }
+function zoomMin() { return state.zoomCap ? state.zoomCap.min : 1; }
+function setZoom(z) {
+  state.zoom = Math.min(zoomMax(), Math.max(zoomMin(), z));
+  applyZoom();
+  renderLenses();
+  const tag = $('zoomtag');
+  tag.textContent = `${state.zoom.toFixed(1)}×`;
+  tag.classList.add('on');
+  clearTimeout(zoomTagT); zoomTagT = setTimeout(() => tag.classList.remove('on'), 700);
+}
+function applyZoom(now) {
+  const digital = state.zoomCap ? 1 : state.zoom;
+  video.style.setProperty('--dz', digital);
+  if (!state.zoomCap || !state.stream) return;
+  const run = () => {
+    zoomRaf = 0;
+    state.stream?.getVideoTracks()[0]?.applyConstraints({ advanced: [{ zoom: state.zoom }] }).catch(() => {});
+  };
+  if (now) run(); else if (!zoomRaf) zoomRaf = requestAnimationFrame(run);
+}
+(function bindPinch() {
+  const el = $('finder'), pts = new Map();
+  let startDist = 0, startZoom = 1;
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  el.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    el.setPointerCapture(e.pointerId);
+    if (pts.size === 2) { startDist = dist(); startZoom = state.zoom; }
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2 && startDist > 0) setZoom(startZoom * (dist() / startDist));
+  });
+  const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) startDist = 0; };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+})();
+
+/* ---------- aspect / orientation ---------- */
+function setAspect(ar) {
+  state.ar = ar;
+  $('finder').style.setProperty('--ar', ar);
+  $('sheet').style.setProperty('--ar', ar);
+}
+function syncAspect() {
+  // follow the phone until the first shot, then the gif's shape is locked
+  if (state.shots.length) return;
+  setAspect(landscapeMQ.matches ? CAP_LONG / CAP_SHORT : CAP_SHORT / CAP_LONG);
+}
+landscapeMQ.addEventListener?.('change', syncAspect);
+
+/* ---------- onion skin ---------- */
+function renderGhost() {
+  const last = state.shots[state.shots.length - 1];
+  const g = $('ghost'), btn = $('ghostBtn');
+  btn.hidden = !last;
+  btn.setAttribute('aria-pressed', state.ghost);
+  if (last) g.src = last.thumb;
+  g.classList.toggle('on', !!last && state.ghost);
+}
+$('ghostBtn').addEventListener('click', () => {
+  state.ghost = !state.ghost;
+  try { localStorage.setItem('loopshot.ghost', state.ghost ? '1' : '0'); } catch {}
+  renderGhost();
 });
 // iOS kills the track when backgrounded; bring it back
 document.addEventListener('visibilitychange', () => {
@@ -436,36 +656,65 @@ document.addEventListener('visibilitychange', () => {
 function grab() {
   const vw = video.videoWidth, vh = video.videoHeight;
   if (!vw || !vh) return null;
+  const portrait = state.ar < 1;
+  const W = portrait ? CAP_SHORT : CAP_LONG, H = portrait ? CAP_LONG : CAP_SHORT;
   const c = document.createElement('canvas');
-  c.width = CAP_W; c.height = CAP_H;
+  c.width = W; c.height = H;
   const ctx = c.getContext('2d');
-  // center-crop to 3:4, same as the object-fit: cover viewfinder
-  const target = CAP_W / CAP_H;
+  // center-crop to the frame aspect (same as object-fit: cover), then the digital zoom on top
   let sw = vw, sh = vh;
-  if (vw / vh > target) sw = vh * target; else sh = vw / target;
+  if (vw / vh > state.ar) sw = vh * state.ar; else sh = vw / state.ar;
+  const dz = state.zoomCap ? 1 : state.zoom;
+  sw /= dz; sh /= dz;
   const sx = (vw - sw) / 2, sy = (vh - sh) / 2;
-  if (state.facing === 'user') { ctx.translate(CAP_W, 0); ctx.scale(-1, 1); }
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, CAP_W, CAP_H);
+  if (state.facing === 'user') { ctx.translate(W, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+  c.thumb = c.toDataURL('image/jpeg', 0.7);
   return c;
 }
 
-shutter.addEventListener('click', () => {
-  if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}. plenty.`); return; }
+// tap = one shot, hold = burst until release
+const BURST_HOLD = 280, BURST_EVERY = 125;
+let holdT = 0, burstT = 0, bursting = false;
+shutter.addEventListener('pointerdown', (e) => {
+  if (shutter.disabled || e.button > 0) return;
+  shutter.setPointerCapture(e.pointerId);
+  bursting = false;
+  holdT = setTimeout(() => {
+    bursting = true;
+    shutter.classList.add('burst');
+    snap();
+    burstT = setInterval(() => { if (!snap()) stopBurst(); }, BURST_EVERY);
+  }, BURST_HOLD);
+});
+function stopBurst() {
+  clearTimeout(holdT); clearInterval(burstT);
+  shutter.classList.remove('burst');
+}
+shutter.addEventListener('pointerup', () => { const was = bursting; stopBurst(); if (!was) snap(); });
+shutter.addEventListener('pointercancel', stopBurst);
+shutter.addEventListener('lostpointercapture', stopBurst);
+shutter.addEventListener('click', (e) => { if (e.detail === 0) snap(); }); // keyboard only
+
+function snap() {
+  if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}. plenty.`); return false; }
   const c = grab();
-  if (!c) return;
+  if (!c) return false;
   state.shots.push(c);
   const f = $('flash');
   f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
   navigator.vibrate?.(8);
   addThumb(c);
   renderCount();
-});
+  renderGhost();
+  return true;
+}
 
 function addThumb(c) {
   const stack = $('stack');
   const t = document.createElement('div');
   t.className = 'thumb enter';
-  t.style.backgroundImage = `url(${c.toDataURL('image/jpeg', 0.6)})`;
+  t.style.backgroundImage = `url(${c.thumb})`;
   stack.insertBefore(t, $('count'));
   requestAnimationFrame(() => requestAnimationFrame(() => t.classList.remove('enter')));
   // keep the DOM small: only the top 3 are ever visible
@@ -477,7 +726,7 @@ function rebuildThumbs() {
   state.shots.slice(-4).forEach((c) => {
     const t = document.createElement('div');
     t.className = 'thumb';
-    t.style.backgroundImage = `url(${c.toDataURL('image/jpeg', 0.6)})`;
+    t.style.backgroundImage = `url(${c.thumb})`;
     $('stack').insertBefore(t, $('count'));
   });
 }
@@ -492,8 +741,8 @@ function renderCount() {
   $('hint').style.opacity = n >= 2 ? 0 : 1;
   $('hint').textContent = n === 1 ? 'one more' : 'take at least 2';
 }
-$('undo').addEventListener('click', () => { state.shots.pop(); rebuildThumbs(); renderCount(); });
-$('reset').addEventListener('click', () => { state.shots = []; rebuildThumbs(); renderCount(); });
+$('undo').addEventListener('click', () => { state.shots.pop(); rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
+$('reset').addEventListener('click', () => { state.shots = []; rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
 
 /* ---------- sheet ---------- */
 function openSheet() {
@@ -581,7 +830,9 @@ async function build() {
   $('busy').classList.add('on');
   $('save').disabled = true;
 
-  const w = state.width, h = Math.round(w * CAP_H / CAP_W);
+  const s0 = state.shots[0], portrait = s0.width < s0.height;
+  const w = portrait ? Math.round(state.width * s0.width / s0.height) : state.width;
+  const h = portrait ? state.width : Math.round(state.width * s0.height / s0.width);
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d', { willReadFrequently: true });
@@ -646,7 +897,9 @@ $('save').addEventListener('click', async () => {
   toast('downloaded. on iPhone you can also long-press the GIF → Save to Photos.');
 });
 
+syncAspect();
 renderCount();
+renderGhost();
 startCamera();
 </script>
 </body>
