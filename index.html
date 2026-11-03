@@ -168,7 +168,20 @@
     height: 104px; padding-top: 14px;
     display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
   }
-  .stack { position: relative; width: var(--edge); height: var(--edge); }
+  .stack { position: relative; width: var(--edge); height: var(--edge); padding: 0; transition: transform 160ms var(--ease-out); }
+  .stack:not(:disabled):active { transform: scale(0.94); }
+  .stack:disabled { cursor: default; }
+  /* faint x over the photo pile: tap the pile to start over */
+  .stack .clearx {
+    position: absolute; left: 50%; top: 50%; z-index: 4; width: 26px; height: 26px;
+    transform: translate(-50%, -50%); color: #fff; opacity: 0; pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,.6));
+    transition: opacity 200ms ease;
+  }
+  .stack:not(:disabled) .clearx { opacity: .6; }
+  .chip[aria-pressed=true] { background: var(--accent); color: #000; }
+  .screenflash { position: fixed; inset: -50vh 0; z-index: 50; background: #fff; opacity: 0; pointer-events: none; transition: opacity 220ms ease; }
+  .screenflash.on { opacity: 1; transition: none; }
   .stack .thumb {
     position: absolute; inset: 0; border-radius: 12px; overflow: hidden;
     background: #222 center / cover no-repeat;
@@ -341,10 +354,11 @@
 </style>
 </head>
 <body>
+<div class="screenflash" id="screenflash"></div>
 <div id="app">
   <div class="top">
-    <button class="chip" id="reset" aria-label="Start over" hidden>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    <button class="chip" id="flashBtn" aria-label="Flash" aria-pressed="false" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z"/></svg>
     </button>
     <div class="brand">loop<b>shot</b></div>
     <button class="chip" id="undo" aria-label="Remove last photo" hidden>
@@ -371,7 +385,10 @@
 
   <div class="bar">
     <div class="leftcell">
-      <div class="stack" id="stack"><div class="count empty" id="count">0</div></div>
+      <button class="stack" id="stack" aria-label="Clear all photos" disabled>
+        <svg class="clearx" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>
+        <div class="count empty" id="count">0</div>
+      </button>
       <button class="lens" id="lens" aria-label="Switch lens" hidden>1×</button>
     </div>
     <button class="shutter" id="shutter" aria-label="Take photo" disabled><i></i></button>
@@ -465,6 +482,8 @@ const state = {
   ghost: false,         // onion skin starts off
   shots: [],            // canvases
   delay: 200,           // ms between frames
+  flash: false,
+  torch: false,         // track has a controllable torch
   mode: 'loop',
   width: 480,           // long side of the gif
   file: null,
@@ -554,6 +573,8 @@ async function attach(stream) {
     if (s.facingMode) state.facing = s.facingMode === 'user' ? 'user' : 'environment';
     const cap = track.getCapabilities?.() || {};
     state.zoomCap = cap.zoom && cap.zoom.max > cap.zoom.min ? { min: cap.zoom.min, max: cap.zoom.max } : null;
+    state.torch = !!cap.torch;
+    renderFlash();
     state.zoom = state.zoomCap ? Math.max(1, state.zoomCap.min) : 1;
     applyZoom(true);
     video.srcObject = state.stream;
@@ -619,9 +640,23 @@ $('nativeCam').addEventListener('change', async (e) => {
   } catch { toast('couldn’t read that photo.'); }
 });
 
+/* ---------- flash ---------- */
+// back camera: real torch if the browser exposes one. front camera: the screen goes white for the shot.
+function renderFlash() {
+  const btn = $('flashBtn');
+  btn.hidden = state.native || !state.stream || !(state.torch || state.facing === 'user');
+  btn.setAttribute('aria-pressed', String(state.flash));
+  btn.setAttribute('aria-label', state.torch ? 'Flashlight' : 'Screen flash');
+  if (state.torch) state.stream.getVideoTracks()[0]?.applyConstraints({ advanced: [{ torch: state.flash }] }).catch(() => {});
+}
+$('flashBtn').addEventListener('click', () => { state.flash = !state.flash; renderFlash(); });
+const screenFlashOn = () => state.flash && !state.torch && state.facing === 'user';
+
 function stopCamera() {
   state.stream?.getTracks().forEach((t) => t.stop());
   state.stream = null;
+  state.torch = false;
+  renderFlash();
 }
 $('allow').addEventListener('click', startCamera);
 $('flip').addEventListener('click', () => {
@@ -797,6 +832,13 @@ shutter.addEventListener('click', (e) => { if (e.detail === 0) snap(); }); // ke
 function snap() {
   if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}. plenty.`); return false; }
   if (state.native) { $('nativeCam').click(); return false; }
+  if (screenFlashOn()) {
+    // light the face first, grab once the white has actually painted
+    const sf = $('screenflash');
+    sf.classList.add('on');
+    setTimeout(() => { addShot(grab()); sf.classList.remove('on'); }, 120);
+    return true;
+  }
   return addShot(grab());
 }
 function addShot(c) {
@@ -837,13 +879,13 @@ function renderCount() {
   cnt.classList.toggle('empty', n === 0);
   cnt.classList.remove('bump'); void cnt.offsetWidth; if (n) cnt.classList.add('bump');
   side.classList.toggle('ready', n >= 2);
-  $('reset').hidden = n === 0;
+  $('stack').disabled = n === 0;
   $('undo').hidden = n === 0;
   $('hint').style.opacity = n >= 2 ? 0 : 1;
   $('hint').textContent = n === 1 ? 'one more' : 'take at least 2';
 }
 $('undo').addEventListener('click', () => { state.shots.pop(); rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
-$('reset').addEventListener('click', () => { state.shots = []; rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
+$('stack').addEventListener('click', () => { state.shots = []; rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
 
 /* ---------- sheet ---------- */
 function openSheet() {
@@ -861,8 +903,8 @@ $('back').addEventListener('click', closeSheet);
 $('more').addEventListener('click', closeSheet);
 
 /* ---------- controls ---------- */
-// speed slider: log scale 40ms .. 1000ms, displayed as fps-ish seconds
-const SPEED_MIN = 40, SPEED_MAX = 1000;
+// speed slider: log scale 20ms .. 1000ms (20ms is the fastest browsers honor; 0-10ms gets slowed to 100ms), displayed as fps-ish seconds
+const SPEED_MIN = 20, SPEED_MAX = 1000;
 const toT = (ms) => Math.log(ms / SPEED_MIN) / Math.log(SPEED_MAX / SPEED_MIN);
 const fromT = (t) => Math.round((SPEED_MIN * Math.pow(SPEED_MAX / SPEED_MIN, t)) / 10) * 10; // gif delays are in 10ms units
 function paintSpeed() {
@@ -1047,7 +1089,7 @@ $('save').addEventListener('click', async () => {
 syncAspect();
 renderCount();
 renderGhost();
-// camera waits for a tap, everywhere
+startCamera();
 </script>
 </body>
 </html>
