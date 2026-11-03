@@ -151,8 +151,6 @@
   .gate .go[hidden] { display: none; }
   .gate .alt { justify-self: center; font-size: 14px; color: var(--dim); text-decoration: underline; text-underline-offset: 3px; padding: 6px; }
   .gate .alt[hidden] { display: none; }
-  .gate .diag { font: 10px/1.35 ui-monospace, Menlo, monospace; color: var(--dim); text-align: left; white-space: pre-wrap; word-break: break-all; max-width: 34ch; max-height: 30vh; overflow: auto; margin: 0 auto; user-select: text; -webkit-user-select: text; }
-  .gate .diag:empty { display: none; }
   .hint {
     position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
     padding: 6px 12px; border-radius: 14px; font-size: 13px; white-space: nowrap;
@@ -354,7 +352,6 @@
         <button class="go" id="allow">Allow camera</button>
         <button class="alt" id="useNative" hidden>use the camera app instead</button>
         <input type="file" id="nativeCam" accept="image/*" capture="environment" hidden>
-        <pre class="diag" id="diag"></pre>
       </div>
     </div>
   </div>
@@ -479,30 +476,15 @@ function toast(msg) {
 }
 
 /* ---------- camera ---------- */
-// what iOS actually did, shown under the gate message when the camera fails
-const diagLog = [];
-const T0 = performance.now();
-function diag(msg) {
-  diagLog.push(`${((performance.now() - T0) / 1000).toFixed(1)}s ${msg}`);
-  if (diagLog.length > 30) diagLog.shift();
-  showDiag();
-}
-function showDiag() { $('diag').textContent = diagLog.join('\n'); }
 // permissions.query can hang in home-screen mode; never let it block anything
 const camPerm = () => Promise.race([
   navigator.permissions?.query({ name: 'camera' }).then((p) => p.state, (e) => `query failed: ${e?.name}`) ?? Promise.resolve('no permissions api'),
   new Promise((r) => setTimeout(() => r('query hung'), 1000)),
 ]);
-diag('build 2026-11-03c');
-diag(`ua ${navigator.userAgent.match(/OS [\d_]+|Version\/[\d.]+/g)?.join(' ') || navigator.userAgent}`);
-diag(`standalone=${navigator.standalone} display=${['standalone', 'fullscreen', 'minimal-ui', 'browser'].find((m) => matchMedia(`(display-mode: ${m})`).matches)} secure=${isSecureContext} top=${window === top}`);
-camPerm().then((st) => diag(`perm at load: ${st}`));
-async function startCamera(e) {
-  diag(`start (${e?.type || 'auto'}, activation=${navigator.userActivation?.isActive ?? '?'})`);
+async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
     $('gateMsg').textContent = 'this browser can’t reach the camera. open it in Safari or Chrome over https.';
     $('allow').hidden = true;
-    diag('no navigator.mediaDevices.getUserMedia'); showDiag();
     return;
   }
   stopCamera();
@@ -521,21 +503,16 @@ async function startCamera(e) {
     // home-screen web apps on iOS sometimes never settle this promise. don't wait forever,
     // but leave room for a person to actually read the prompt.
     const timeout = new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('timeout'), { name: 'Timeout' })), 12000));
-    diag('getUserMedia called');
-    const tick = setInterval(() => { if (req !== camReq) return clearInterval(tick); diag('…still waiting on iOS'); }, 3000);
-    ask.then(() => clearInterval(tick), () => clearInterval(tick)); setTimeout(() => clearInterval(tick), 12500);
     ask.then((st) => { // a late answer still counts, as long as nothing newer started
-      diag(`got stream: ${st.getVideoTracks()[0]?.label || '?'} ${st.getVideoTracks()[0]?.readyState}`);
       if (req !== camReq || state.stream) { st.getTracks().forEach((t) => t.stop()); return; }
       attach(st);
-    }, (e) => diag(`rejected: ${e?.name}: ${e?.message}`));
+    }, () => {});
     await Promise.race([ask, timeout]);
   } catch (err) {
     if (req !== camReq || state.stream) return;
     if (state.deviceId && err?.name === 'OverconstrainedError') { state.deviceId = null; return startCamera(); }
     // a silent hang is usually a remembered "no": iOS just stops asking
     const perm = await camPerm();
-    diag(`failed: ${err?.name}${err?.name === 'Timeout' ? ' (no answer in 12s)' : ''}, perm now ${perm}`);
     const denied = perm === 'denied' || (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError'));
     if (!denied && err?.name !== 'Timeout' && !state.plain) { state.plain = true; state.deviceId = null; return startCamera(); }
     $('gateMsg').textContent = err?.name === 'Timeout' && !denied
@@ -585,8 +562,6 @@ async function attach(stream) {
     renderLenses();
   } catch (err) {
     stopCamera();
-    diag(`play failed: ${err?.name}, readyState=${video.readyState} size=${video.videoWidth}x${video.videoHeight}`);
-    showDiag();
     $('gateMsg').textContent = `camera started but wouldn’t play (${err?.name || 'error'}). tap again, or use the camera app.`;
     $('allow').textContent = 'Try again';
     $('allow').hidden = false;
