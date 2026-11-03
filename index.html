@@ -488,9 +488,7 @@ async function startCamera() {
   const req = ++camReq;
   $('allow').textContent = 'Starting…';
   try {
-    // a hard "denied" won't prompt again, so say where to flip it instead of asking into the void
-    const perm = await navigator.permissions?.query({ name: 'camera' }).catch(() => null);
-    if (perm?.state === 'denied') throw Object.assign(new Error('denied'), { name: 'NotAllowedError' });
+    // nothing awaited before this: iOS only shows the prompt while it still counts as the tap
     const ask = navigator.mediaDevices.getUserMedia({
       audio: false,
       video: state.deviceId
@@ -508,9 +506,11 @@ async function startCamera() {
   } catch (err) {
     if (req !== camReq || state.stream) return;
     if (state.deviceId && err?.name === 'OverconstrainedError') { state.deviceId = null; return startCamera(); }
-    const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+    // a silent hang is usually a remembered "no": iOS just stops asking
+    const perm = await navigator.permissions?.query({ name: 'camera' }).catch(() => null);
+    const denied = perm?.state === 'denied' || (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError'));
     if (!denied && err?.name !== 'Timeout' && !state.plain) { state.plain = true; state.deviceId = null; return startCamera(); }
-    $('gateMsg').textContent = err?.name === 'Timeout'
+    $('gateMsg').textContent = err?.name === 'Timeout' && !denied
       ? (standalone
         ? 'iOS is being stubborn about the camera in home-screen mode. tap again, or use the camera app.'
         : 'the camera isn’t answering. tap again, or use the camera app.')
