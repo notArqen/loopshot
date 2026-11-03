@@ -71,6 +71,32 @@
   .chip svg { width: 18px; height: 18px; }
   .chip[hidden] { display: inline-flex; opacity: 0; pointer-events: none; }
   .brand { font-weight: 700; letter-spacing: -.01em; font-size: 17px; }
+  /* info before the first shot, undo after: same spot */
+  .slot { display: grid; place-items: center; }
+  .slot > .chip { grid-area: 1 / 1; }
+  /* first visit: the info button pulses until it has been opened once */
+  #info.fresh { position: relative; }
+  #info.fresh::after {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    box-shadow: 0 0 0 0 var(--accent); animation: beckon 1.6s var(--ease-out) infinite;
+  }
+  #info.fresh { color: var(--accent); }
+  @keyframes beckon { 0% { box-shadow: 0 0 0 0 rgba(255,210,63,.75); } 100% { box-shadow: 0 0 0 12px rgba(255,210,63,0); } }
+  @media (prefers-reduced-motion: reduce) { #info.fresh::after { animation: none; box-shadow: 0 0 0 2px var(--accent); } }
+  .how {
+    margin: auto; width: min(340px, calc(100vw - 32px)); max-height: calc(100dvh - 64px); overflow: auto;
+    padding: 22px 20px 18px; border: 0; border-radius: 22px;
+    background: #161618; color: var(--fg);
+    opacity: 0; transform: scale(.96);
+    transition: opacity 200ms ease, transform 200ms var(--ease-out), overlay 200ms allow-discrete, display 200ms allow-discrete;
+  }
+  .how[open] { opacity: 1; transform: none; }
+  @starting-style { .how[open] { opacity: 0; transform: scale(.96); } }
+  .how::backdrop { background: rgba(0,0,0,.55); }
+  .how h2 { font-size: 20px; letter-spacing: -.01em; margin-bottom: 12px; }
+  .how ul { list-style: none; display: grid; gap: 9px; font-size: 15px; color: var(--dim); margin-bottom: 18px; }
+  .how b { color: var(--fg); }
+  .how .go { width: 100%; }
   .brand b { color: var(--accent); }
 
   /* viewfinder */
@@ -146,13 +172,13 @@
   .gate.gone { opacity: 0; pointer-events: none; }
   .gate h1 { font-size: 30px; letter-spacing: -.02em; line-height: 1.05; }
   .gate p { color: var(--dim); font-size: 14px; max-width: 26ch; margin: 0 auto; }
-  .gate .go {
+  .gate .go, .how .go {
     justify-self: center; margin-top: 6px;
     height: 46px; padding: 0 22px; border-radius: 23px;
     background: var(--fg); color: #000; font-weight: 600;
     transition: transform 160ms var(--ease-out);
   }
-  .gate .go:active { transform: scale(0.96); }
+  .gate .go:active, .how .go:active { transform: scale(0.96); }
   .gate .go[hidden] { display: none; }
   .gate .alt { justify-self: center; font-size: 14px; color: var(--dim); text-decoration: underline; text-underline-offset: 3px; padding: 6px; }
   .gate .alt[hidden] { display: none; }
@@ -171,6 +197,16 @@
   .stack { position: relative; width: var(--edge); height: var(--edge); padding: 0; transition: transform 160ms var(--ease-out); }
   .stack:not(:disabled):active { transform: scale(0.94); }
   .stack:disabled { cursor: default; }
+  /* before the first shot the pile's slot is an upload button */
+  .leftcell > .stack, .leftcell > .upload { grid-column: 1; grid-row: 1; }
+  .upload {
+    width: var(--ctl); height: var(--ctl); border-radius: 14px; z-index: 1;
+    display: grid; place-items: center; background: var(--glass);
+    transition: transform 160ms var(--ease-out), opacity 200ms ease;
+  }
+  .upload svg { width: 24px; height: 24px; }
+  .upload:active { transform: scale(0.92); }
+  .upload[hidden] { display: grid; opacity: 0; pointer-events: none; }
   /* faint x over the photo pile: tap the pile to start over */
   .stack .clearx {
     position: absolute; left: 50%; top: 50%; z-index: 4; width: 26px; height: 26px;
@@ -215,6 +251,7 @@
   }
   .shutter:active i { transform: scale(0.88); }
   .shutter.burst i { transform: scale(0.7); background: var(--accent); transition: transform 200ms var(--ease-out), background-color 150ms ease; }
+  .shutter.filming i { transform: scale(0.5); border-radius: 22%; background: #ff3b30; transition: transform 200ms var(--ease-out), border-radius 200ms var(--ease-out), background-color 150ms ease; }
   .shutter:disabled { opacity: .35; }
 
   .side { position: relative; width: var(--edge); height: var(--edge); }
@@ -338,7 +375,7 @@
     .rightcell > .ghostbtn { grid-row: 2; }
     .shutter { grid-row: 2; width: 72px; height: 72px; }
     .leftcell { grid-row: 3; align-self: stretch; grid-template-columns: none; grid-template-rows: 1fr var(--edge); }
-    .leftcell > .stack { grid-row: 2; }
+    .leftcell > .stack, .leftcell > .upload { grid-row: 2; }
     .leftcell > .lens { grid-row: 1; }
 
     .sheet {
@@ -355,15 +392,35 @@
 </head>
 <body>
 <div class="screenflash" id="screenflash"></div>
+<dialog class="how" id="how" aria-labelledby="howTitle">
+  <h2 id="howTitle">how it works</h2>
+  <ul>
+    <li><b>tap</b> the shutter for one photo</li>
+    <li><b>hold</b> it for a burst</li>
+    <li><b>tap, then hold</b> to film: every frame, like a video</li>
+    <li><b>slide up or down</b> on the picture to zoom</li>
+    <li><b>⚡</b> top left, when your phone allows it: flashlight, or a screen flash on the selfie camera</li>
+    <li><b>the box</b> by the shutter overlays your last photo, to line up the next</li>
+    <li><b>tap the pile</b> of photos to start over</li>
+    <li><b>✓</b> when you have two or more: make the GIF, then save it to Photos</li>
+    <li>no camera needed: the <b>photo button</b> bottom left turns photos you already have into a GIF</li>
+  </ul>
+  <button class="go" id="howClose">Got it</button>
+</dialog>
 <div id="app">
   <div class="top">
     <button class="chip" id="flashBtn" aria-label="Flash" aria-pressed="false" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z"/></svg>
     </button>
     <div class="brand">loop<b>shot</b></div>
-    <button class="chip" id="undo" aria-label="Remove last photo" hidden>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
-    </button>
+    <div class="slot">
+      <button class="chip" id="info" aria-label="How it works">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/></svg>
+      </button>
+      <button class="chip" id="undo" aria-label="Remove last photo" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+      </button>
+    </div>
   </div>
 
   <div class="stage">
@@ -385,6 +442,10 @@
 
   <div class="bar">
     <div class="leftcell">
+      <button class="upload" id="upload" aria-label="Make a GIF from photos you already have">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="9" cy="9.5" r="1.6"/><path d="M20.5 15.5l-4.5-4.5-8.5 9"/></svg>
+      </button>
+      <input type="file" id="pick" accept="image/*" multiple hidden>
       <button class="stack" id="stack" aria-label="Clear all photos" disabled>
         <svg class="clearx" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>
         <div class="count empty" id="count">0</div>
@@ -628,6 +689,34 @@ $('useNative').addEventListener('click', () => {
   $('hint').textContent = 'shutter opens the camera app';
   $('nativeCam').click();
 });
+/* ---------- how it works ---------- */
+try { if (!localStorage.getItem('loopshot.seenHow')) $('info').classList.add('fresh'); } catch {}
+$('info').addEventListener('click', () => {
+  $('how').showModal();
+  $('info').classList.remove('fresh');
+  try { localStorage.setItem('loopshot.seenHow', '1'); } catch {}
+});
+$('howClose').addEventListener('click', () => $('how').close());
+$('how').addEventListener('click', (e) => { if (e.target === $('how')) $('how').close(); }); // tap outside
+
+// existing photos → frames, in the order picked. two or more go straight to the gif.
+$('upload').addEventListener('click', () => $('pick').click());
+$('pick').addEventListener('change', async (e) => {
+  const files = [...(e.target.files || [])].slice(0, MAX_SHOTS - state.shots.length);
+  e.target.value = '';
+  let bad = 0;
+  for (const f of files) {
+    try {
+      const bmp = await createImageBitmap(f, { imageOrientation: 'from-image' });
+      if (!state.shots.length) setAspect(bmp.width > bmp.height ? CAP_LONG / CAP_SHORT : CAP_SHORT / CAP_LONG);
+      addShot(drawFrame(bmp, bmp.width, bmp.height, 1, false), true);
+      bmp.close?.();
+    } catch { bad++; }
+  }
+  if (bad) toast(`couldn’t read ${bad === 1 ? 'one photo' : `${bad} photos`}.`);
+  if (state.shots.length >= 2) openSheet();
+  else if (state.shots.length === 1) toast('one in. snap or add more.');
+});
 $('nativeCam').addEventListener('change', async (e) => {
   const f = e.target.files?.[0];
   e.target.value = '';
@@ -806,25 +895,52 @@ function drawFrame(src, vw, vh, dz, mirror) {
   return c;
 }
 
-// tap = one shot, hold = burst until release
+// tap = one shot, hold = burst until release, tap-then-hold = video: every camera frame until release
 const BURST_HOLD = 280, BURST_EVERY = 125;
-let holdT = 0, burstT = 0, bursting = false;
+const VIDEO_GAP = 350, VIDEO_HOLD = 140, VIDEO_EVERY = 30; // ms: tap→press window, press→start, min frame spacing
+let holdT = 0, burstT = 0, bursting = false, filming = false, lastTapUp = 0;
 shutter.addEventListener('pointerdown', (e) => {
   if (shutter.disabled || e.button > 0 || state.native) return;
   shutter.setPointerCapture(e.pointerId);
   bursting = false;
+  const isVideo = performance.now() - lastTapUp < VIDEO_GAP;
   holdT = setTimeout(() => {
     bursting = true;
     shutter.classList.add('burst');
+    if (isVideo) { film(); return; }
     snap();
     burstT = setInterval(() => { if (!snap()) stopBurst(); }, BURST_EVERY);
-  }, BURST_HOLD);
+  }, isVideo ? VIDEO_HOLD : BURST_HOLD);
 });
+function film() {
+  filming = true;
+  shutter.classList.add('filming');
+  if (screenFlashOn()) $('screenflash').classList.add('on'); // stays lit for the whole take
+  // play it back at the speed it was shot, unless they already chose something faster
+  if (state.delay > 40) { state.delay = 40; paintSpeed(); }
+  let last = 0;
+  const next = () => video.requestVideoFrameCallback ? video.requestVideoFrameCallback(tick) : requestAnimationFrame(tick);
+  const tick = () => {
+    if (!filming) return;
+    const now = performance.now();
+    if (now - last >= VIDEO_EVERY) {
+      last = now;
+      if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}. plenty.`); return stopBurst(); }
+      addShot(grab(), true);
+    }
+    next();
+  };
+  tick();
+}
 function stopBurst() {
   clearTimeout(holdT); clearInterval(burstT);
-  shutter.classList.remove('burst');
+  if (filming) { filming = false; $('screenflash').classList.remove('on'); }
+  shutter.classList.remove('burst', 'filming');
 }
-shutter.addEventListener('pointerup', () => { const was = bursting; stopBurst(); if (!was) snap(); });
+shutter.addEventListener('pointerup', () => {
+  const was = bursting; stopBurst();
+  if (!was) { snap(); lastTapUp = performance.now(); }
+});
 shutter.addEventListener('pointercancel', stopBurst);
 shutter.addEventListener('lostpointercapture', stopBurst);
 shutter.addEventListener('click', (e) => { if (e.detail === 0) snap(); }); // keyboard only
@@ -841,11 +957,11 @@ function snap() {
   }
   return addShot(grab());
 }
-function addShot(c) {
+function addShot(c, quiet) {
   if (!c) return false;
   state.shots.push(c);
   const f = $('flash');
-  f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
+  if (!quiet) { f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on'))); }
   navigator.vibrate?.(8);
   addThumb(c);
   renderCount();
@@ -880,7 +996,9 @@ function renderCount() {
   cnt.classList.remove('bump'); void cnt.offsetWidth; if (n) cnt.classList.add('bump');
   side.classList.toggle('ready', n >= 2);
   $('stack').disabled = n === 0;
+  $('upload').hidden = n > 0;
   $('undo').hidden = n === 0;
+  $('info').hidden = n > 0;
   $('hint').style.opacity = n >= 2 ? 0 : 1;
   $('hint').textContent = n === 1 ? 'one more' : 'take at least 2';
 }
