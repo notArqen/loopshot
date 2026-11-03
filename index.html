@@ -154,6 +154,8 @@
   }
   .gate .go:active { transform: scale(0.96); }
   .gate .go[hidden] { display: none; }
+  .gate .alt { justify-self: center; font-size: 14px; color: var(--dim); text-decoration: underline; text-underline-offset: 3px; padding: 6px; }
+  .gate .alt[hidden] { display: none; }
   .hint {
     position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
     padding: 6px 12px; border-radius: 14px; font-size: 13px; white-space: nowrap;
@@ -357,6 +359,8 @@
         <h1>Snap. Snap. Loop.</h1>
         <p id="gateMsg">take a few photos, get a GIF in your camera roll.</p>
         <button class="go" id="allow">Allow camera</button>
+        <button class="alt" id="useNative" hidden>use the camera app instead</button>
+        <input type="file" id="nativeCam" accept="image/*" capture="environment" hidden>
       </div>
     </div>
   </div>
@@ -433,7 +437,7 @@ import { GIFEncoder, quantize, applyPalette } from 'https://unpkg.com/gifenc@1.0
 
 const $ = (id) => document.getElementById(id);
 const video = $('video'), shutter = $('shutter'), side = $('side');
-const MAX_SHOTS = 40;
+const MAX_SHOTS = 100; // ~1.2MB of canvas each; iOS safari kills tabs well past this
 const CAP_LONG = 640, CAP_SHORT = 480; // stored frame size, 4:3 either way up
 const DIGITAL_MAX = 5;
 const landscapeMQ = matchMedia('(orientation: landscape)');
@@ -481,13 +485,46 @@ async function startCamera() {
   }
   stopCamera();
   const size = { width: { ideal: 1920 }, height: { ideal: 1920 } };
+  const req = ++camReq;
+  $('allow').textContent = 'Starting…';
   try {
-    state.stream = await navigator.mediaDevices.getUserMedia({
+    const ask = navigator.mediaDevices.getUserMedia({
       audio: false,
       video: state.deviceId
         ? { deviceId: { exact: state.deviceId }, ...size }
         : { facingMode: { ideal: state.facing }, ...size },
     });
+    // home-screen web apps on iOS sometimes never settle this promise. don't wait forever.
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('timeout'), { name: 'Timeout' })), 6000));
+    ask.then((st) => { // a late answer still counts, as long as nothing newer started
+      if (req !== camReq || state.stream) { st.getTracks().forEach((t) => t.stop()); return; }
+      attach(st);
+    }, () => {});
+    await Promise.race([ask, timeout]);
+  } catch (err) {
+    if (req !== camReq || state.stream) return;
+    if (state.deviceId && err?.name === 'OverconstrainedError') { state.deviceId = null; return startCamera(); }
+    const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+    $('gateMsg').textContent = err?.name === 'Timeout'
+      ? (standalone
+        ? 'iOS is being stubborn about the camera in home-screen mode. tap again, or use the camera app.'
+        : 'the camera isn’t answering. tap again, or use the camera app.')
+      : denied
+        ? (standalone
+          ? 'camera was blocked. iOS asks again each launch: close the app fully, reopen, and tap Allow.'
+          : 'camera access was blocked. allow it in your browser’s site settings, then tap below.')
+        : `couldn’t start the camera (${err?.name || 'error'}). is another app using it?`;
+    $('allow').textContent = 'Try again';
+    $('allow').hidden = false;
+    $('useNative').hidden = false;
+    $('gate').classList.remove('gone');
+    shutter.disabled = true;
+  }
+}
+async function attach(stream) {
+  try {
+    state.stream = stream;
+    state.native = false;
     const track = state.stream.getVideoTracks()[0];
     const s = track.getSettings?.() || {};
     state.deviceId = s.deviceId || state.deviceId;
@@ -504,17 +541,37 @@ async function startCamera() {
     await listCams();
     renderLenses();
   } catch (err) {
-    if (state.deviceId && err?.name === 'OverconstrainedError') { state.deviceId = null; return startCamera(); }
-    const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
-    $('gateMsg').textContent = denied
-      ? 'camera access was blocked. allow it in your browser’s site settings, then tap below.'
-      : 'couldn’t start the camera. is another app using it?';
+    $('gateMsg').textContent = `camera started but wouldn’t play (${err?.name || 'error'}). tap again.`;
     $('allow').textContent = 'Try again';
-    $('allow').hidden = false;
     $('gate').classList.remove('gone');
-    shutter.disabled = true;
   }
 }
+let camReq = 0;
+const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+
+/* ---------- native camera fallback ---------- */
+// when live camera won't start, each shutter press opens the system camera instead
+$('useNative').addEventListener('click', () => {
+  state.native = true;
+  stopCamera();
+  $('gate').classList.add('gone');
+  shutter.disabled = false;
+  $('lenses').textContent = '';
+  $('hint').textContent = 'shutter opens the camera app';
+  $('nativeCam').click();
+});
+$('nativeCam').addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  e.target.value = '';
+  if (!f) return;
+  try {
+    const bmp = await createImageBitmap(f, { imageOrientation: 'from-image' });
+    if (!state.shots.length) setAspect(bmp.width > bmp.height ? CAP_LONG / CAP_SHORT : CAP_SHORT / CAP_LONG);
+    addShot(drawFrame(bmp, bmp.width, bmp.height, 1, false));
+    bmp.close?.();
+  } catch { toast('couldn’t read that photo.'); }
+});
+
 function stopCamera() {
   state.stream?.getTracks().forEach((t) => t.stop());
   state.stream = null;
@@ -656,6 +713,9 @@ document.addEventListener('visibilitychange', () => {
 function grab() {
   const vw = video.videoWidth, vh = video.videoHeight;
   if (!vw || !vh) return null;
+  return drawFrame(video, vw, vh, state.zoomCap ? 1 : state.zoom, state.facing === 'user');
+}
+function drawFrame(src, vw, vh, dz, mirror) {
   const portrait = state.ar < 1;
   const W = portrait ? CAP_SHORT : CAP_LONG, H = portrait ? CAP_LONG : CAP_SHORT;
   const c = document.createElement('canvas');
@@ -664,11 +724,10 @@ function grab() {
   // center-crop to the frame aspect (same as object-fit: cover), then the digital zoom on top
   let sw = vw, sh = vh;
   if (vw / vh > state.ar) sw = vh * state.ar; else sh = vw / state.ar;
-  const dz = state.zoomCap ? 1 : state.zoom;
   sw /= dz; sh /= dz;
   const sx = (vw - sw) / 2, sy = (vh - sh) / 2;
-  if (state.facing === 'user') { ctx.translate(W, 0); ctx.scale(-1, 1); }
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+  if (mirror) { ctx.translate(W, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
   c.thumb = c.toDataURL('image/jpeg', 0.7);
   return c;
 }
@@ -677,7 +736,7 @@ function grab() {
 const BURST_HOLD = 280, BURST_EVERY = 125;
 let holdT = 0, burstT = 0, bursting = false;
 shutter.addEventListener('pointerdown', (e) => {
-  if (shutter.disabled || e.button > 0) return;
+  if (shutter.disabled || e.button > 0 || state.native) return;
   shutter.setPointerCapture(e.pointerId);
   bursting = false;
   holdT = setTimeout(() => {
@@ -698,7 +757,10 @@ shutter.addEventListener('click', (e) => { if (e.detail === 0) snap(); }); // ke
 
 function snap() {
   if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}. plenty.`); return false; }
-  const c = grab();
+  if (state.native) { $('nativeCam').click(); return false; }
+  return addShot(grab());
+}
+function addShot(c) {
   if (!c) return false;
   state.shots.push(c);
   const f = $('flash');
@@ -900,7 +962,11 @@ $('save').addEventListener('click', async () => {
 syncAspect();
 renderCount();
 renderGhost();
-startCamera();
+if (standalone) {
+  $('allow').textContent = 'Start camera';
+} else {
+  startCamera();
+}
 </script>
 </body>
 </html>
