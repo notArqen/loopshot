@@ -13,6 +13,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-title" content="loopshot">
 <style>
   :root {
@@ -482,18 +483,23 @@ async function startCamera() {
     return;
   }
   stopCamera();
-  const size = { width: { ideal: 1920 }, height: { ideal: 1920 } };
+  // home-screen apps can choke on fancy constraints; after one failure, ask plainly
+  const size = state.plain ? {} : { width: { ideal: 1920 }, height: { ideal: 1920 } };
   const req = ++camReq;
   $('allow').textContent = 'Starting…';
   try {
+    // a hard "denied" won't prompt again, so say where to flip it instead of asking into the void
+    const perm = await navigator.permissions?.query({ name: 'camera' }).catch(() => null);
+    if (perm?.state === 'denied') throw Object.assign(new Error('denied'), { name: 'NotAllowedError' });
     const ask = navigator.mediaDevices.getUserMedia({
       audio: false,
       video: state.deviceId
         ? { deviceId: { exact: state.deviceId }, ...size }
-        : { facingMode: { ideal: state.facing }, ...size },
+        : state.plain ? { facingMode: state.facing } : { facingMode: { ideal: state.facing }, ...size },
     });
-    // home-screen web apps on iOS sometimes never settle this promise. don't wait forever.
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('timeout'), { name: 'Timeout' })), 6000));
+    // home-screen web apps on iOS sometimes never settle this promise. don't wait forever,
+    // but leave room for a person to actually read the prompt.
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('timeout'), { name: 'Timeout' })), 12000));
     ask.then((st) => { // a late answer still counts, as long as nothing newer started
       if (req !== camReq || state.stream) { st.getTracks().forEach((t) => t.stop()); return; }
       attach(st);
@@ -503,13 +509,14 @@ async function startCamera() {
     if (req !== camReq || state.stream) return;
     if (state.deviceId && err?.name === 'OverconstrainedError') { state.deviceId = null; return startCamera(); }
     const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+    if (!denied && err?.name !== 'Timeout' && !state.plain) { state.plain = true; state.deviceId = null; return startCamera(); }
     $('gateMsg').textContent = err?.name === 'Timeout'
       ? (standalone
         ? 'iOS is being stubborn about the camera in home-screen mode. tap again, or use the camera app.'
         : 'the camera isn’t answering. tap again, or use the camera app.')
       : denied
         ? (standalone
-          ? 'camera was blocked. iOS asks again each launch: close the app fully, reopen, and tap Allow.'
+          ? 'camera was blocked. set Settings → Apps → Safari → Camera to Ask, then swipe this app away, reopen, and tap Allow.'
           : 'camera access was blocked. allow it in your browser’s site settings, then tap below.')
         : `couldn’t start the camera (${err?.name || 'error'}). is another app using it?`;
     $('allow').textContent = 'Try again';
@@ -534,15 +541,39 @@ async function attach(stream) {
     video.srcObject = state.stream;
     video.classList.toggle('mirror', state.facing === 'user');
     await video.play().catch(() => {});
+    // webkit bug 273938: in home-screen mode the stream can arrive and then sit at
+    // loadstart forever. kick it once, then retry with plain constraints, then give up loudly.
+    if (!(await framesFlowing())) {
+      video.srcObject = null; video.load(); video.srcObject = stream;
+      await video.play().catch(() => {});
+      if (!(await framesFlowing())) {
+        if (!state.plain) { state.plain = true; state.deviceId = null; return startCamera(); }
+        throw Object.assign(new Error('stalled'), { name: 'Stalled' });
+      }
+    }
     $('gate').classList.add('gone');
     shutter.disabled = false;
     await listCams();
     renderLenses();
   } catch (err) {
-    $('gateMsg').textContent = `camera started but wouldn’t play (${err?.name || 'error'}). tap again.`;
+    stopCamera();
+    $('gateMsg').textContent = `camera started but wouldn’t play (${err?.name || 'error'}). tap again, or use the camera app.`;
     $('allow').textContent = 'Try again';
+    $('allow').hidden = false;
+    $('useNative').hidden = false;
     $('gate').classList.remove('gone');
+    shutter.disabled = true;
   }
+}
+function framesFlowing(ms = 2500) {
+  return new Promise((res) => {
+    const t0 = performance.now();
+    (function check() {
+      if (video.readyState >= 2 && video.videoWidth > 0) return res(true);
+      if (performance.now() - t0 > ms) return res(false);
+      setTimeout(check, 100);
+    })();
+  });
 }
 let camReq = 0;
 const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
