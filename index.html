@@ -403,7 +403,7 @@
     <li><b>the box</b> by the shutter overlays your last photo, to line up the next</li>
     <li><b>tap the pile</b> of photos to start over</li>
     <li><b>✓</b> when you have two or more: make the GIF, then save it to Photos</li>
-    <li>no camera needed: the <b>photo button</b> bottom left turns photos you already have into a GIF</li>
+    <li>no camera needed: the <b>photo button</b> bottom left turns photos or a video you already have into a GIF</li>
   </ul>
   <button class="go" id="howClose">Got it</button>
 </dialog>
@@ -442,10 +442,10 @@
 
   <div class="bar">
     <div class="leftcell">
-      <button class="upload" id="upload" aria-label="Make a GIF from photos you already have">
+      <button class="upload" id="upload" aria-label="Make a GIF from photos or a video you already have">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="9" cy="9.5" r="1.6"/><path d="M20.5 15.5l-4.5-4.5-8.5 9"/></svg>
       </button>
-      <input type="file" id="pick" accept="image/*" multiple hidden>
+      <input type="file" id="pick" accept="image/*,video/*" multiple hidden>
       <button class="stack" id="stack" aria-label="Clear all photos" disabled>
         <svg class="clearx" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>
         <div class="count empty" id="count">0</div>
@@ -699,13 +699,55 @@ $('info').addEventListener('click', () => {
 $('howClose').addEventListener('click', () => $('how').close());
 $('how').addEventListener('click', (e) => { if (e.target === $('how')) $('how').close(); }); // tap outside
 
-// existing photos → frames, in the order picked. two or more go straight to the gif.
+// a video → frames. up to 4s plays at 25fps; longer clips thin out, and past 8s only the start is used.
+async function addVideo(file) {
+  const room = MAX_SHOTS - state.shots.length;
+  if (room < 2) return 0;
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.preload = 'auto';
+  const url = URL.createObjectURL(file);
+  v.src = url;
+  const once = (ev) => new Promise((res, rej) => {
+    const ok = () => { v.removeEventListener('error', bad); res(); };
+    const bad = () => { v.removeEventListener(ev, ok); rej(v.error || new Error(ev)); };
+    v.addEventListener(ev, ok, { once: true }); v.addEventListener('error', bad, { once: true });
+  });
+  try {
+    await once('loadedmetadata');
+    // ios won't decode a frame for seeking until playback has started once
+    await v.play().catch(() => {}); v.pause();
+    if (v.duration === Infinity) { v.currentTime = 1e9; await once('seeked'); v.currentTime = 0; await once('seeked'); } // some recorders don't write a duration
+    const dur = v.duration;
+    if (!isFinite(dur) || dur <= 0 || !v.videoWidth) throw new Error('unreadable');
+    const span = Math.min(dur, room * 0.08), step = Math.max(0.04, span / room);
+    const count = Math.max(2, Math.min(room, Math.floor(span / step)));
+    if (!state.shots.length) setAspect(v.videoWidth > v.videoHeight ? CAP_LONG / CAP_SHORT : CAP_SHORT / CAP_LONG);
+    for (let i = 0; i < count; i++) {
+      v.currentTime = Math.min(dur - 0.001, i * step);
+      await once('seeked');
+      addShot(drawFrame(v, v.videoWidth, v.videoHeight, 1, false), true);
+      if (i % 10 === 0) toast(`reading video… ${Math.round((i / count) * 100)}%`);
+    }
+    // play back at the speed it was filmed
+    state.delay = Math.max(SPEED_MIN, Math.round((step * 1000) / 10) * 10); paintSpeed();
+    return count;
+  } finally {
+    URL.revokeObjectURL(url);
+    v.removeAttribute('src'); v.load();
+  }
+}
+
+// existing photos (and videos) → frames, in the order picked. two or more go straight to the gif.
 $('upload').addEventListener('click', () => $('pick').click());
 $('pick').addEventListener('change', async (e) => {
   const files = [...(e.target.files || [])].slice(0, MAX_SHOTS - state.shots.length);
   e.target.value = '';
   let bad = 0;
   for (const f of files) {
+    if (f.type.startsWith('video/') || /\.(mov|mp4|m4v|webm)$/i.test(f.name)) {
+      try { await addVideo(f); } catch { bad++; }
+      continue;
+    }
     try {
       const bmp = await createImageBitmap(f, { imageOrientation: 'from-image' });
       if (!state.shots.length) setAspect(bmp.width > bmp.height ? CAP_LONG / CAP_SHORT : CAP_SHORT / CAP_LONG);
@@ -713,7 +755,7 @@ $('pick').addEventListener('change', async (e) => {
       bmp.close?.();
     } catch { bad++; }
   }
-  if (bad) toast(`couldn’t read ${bad === 1 ? 'one photo' : `${bad} photos`}.`);
+  if (bad) toast(`couldn’t read ${bad === 1 ? 'one of those' : `${bad} of those`}.`);
   if (state.shots.length >= 2) openSheet();
   else if (state.shots.length === 1) toast('one in. snap or add more.');
 });
@@ -961,8 +1003,10 @@ function addShot(c, quiet) {
   if (!c) return false;
   state.shots.push(c);
   const f = $('flash');
-  if (!quiet) { f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on'))); }
-  navigator.vibrate?.(8);
+  if (!quiet) {
+    f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
+    navigator.vibrate?.(8);
+  }
   addThumb(c);
   renderCount();
   renderGhost();
