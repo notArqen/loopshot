@@ -87,22 +87,17 @@
   }
   .finder video.mirror { transform: scaleX(-1) scale(var(--dz, 1)); }
 
-  /* lens + zoom pills, iOS-camera style */
-  .lenses {
-    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
-    display: flex; gap: 4px; padding: 4px; border-radius: 22px;
-    background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
-    transition: opacity 200ms ease;
+  /* one lens button beside the shutter: tap cycles lenses (or zoom steps), pinch for anything between */
+  .leftcell { justify-self: stretch; display: flex; align-items: center; justify-content: space-between; padding-right: 14px; }
+  .lens {
+    width: 46px; height: 46px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums;
+    background: var(--glass);
+    transition: transform 160ms var(--ease-out), opacity 200ms ease;
   }
-  .lenses:empty { display: none; }
-  .lenses button {
-    min-width: 36px; height: 36px; padding: 0 8px; border-radius: 18px;
-    font-size: 12px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums;
-    background: rgba(255,255,255,.12);
-    transition: transform 160ms var(--ease-out), background-color 200ms ease, color 200ms ease;
-  }
-  .lenses button:active { transform: scale(0.92); }
-  .lenses button[aria-pressed=true] { color: var(--accent); background: rgba(0,0,0,.55); }
+  .lens:active { transform: scale(0.92); }
+  .lens[hidden] { display: grid; opacity: 0; pointer-events: none; }
   .zoomtag {
     position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.96);
     padding: 8px 14px; border-radius: 16px; font-size: 20px; font-weight: 700;
@@ -119,19 +114,18 @@
     transition: opacity 200ms ease;
   }
   .onion.on { opacity: .5; }
+  .rightcell { justify-self: stretch; display: flex; align-items: center; justify-content: space-between; padding-left: 14px; }
+  /* checkbox look, so it can't be mistaken for the round "make gif" check */
   .ghostbtn {
-    position: absolute; top: 12px; right: 12px;
-    width: 32px; height: 32px; border-radius: 10px;
+    width: 34px; height: 34px; margin: 6px; border-radius: 10px;
     display: grid; place-items: center;
-    background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
-    border: 2px solid rgba(255,255,255,.7);
-    color: transparent;
-    transition: transform 160ms var(--ease-out), background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+    border: 2px solid rgba(255,255,255,.7); color: transparent;
+    transition: transform 160ms var(--ease-out), background-color 200ms ease, border-color 200ms ease, color 200ms ease, opacity 200ms ease;
   }
   .ghostbtn svg { width: 18px; height: 18px; }
   .ghostbtn:active { transform: scale(0.9); }
   .ghostbtn[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #000; }
-  .ghostbtn[hidden] { display: none; }
+  .ghostbtn[hidden] { display: grid; opacity: 0; pointer-events: none; }
   .flash {
     position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none;
     transition: opacity 260ms var(--ease-out);
@@ -204,7 +198,7 @@
   .shutter.burst i { transform: scale(0.7); background: var(--accent); transition: transform 200ms var(--ease-out), background-color 150ms ease; }
   .shutter:disabled { opacity: .35; }
 
-  .side { justify-self: end; position: relative; width: 56px; height: 56px; }
+  .side { position: relative; width: 56px; height: 56px; flex: none; }
   .side > button {
     position: absolute; inset: 0; border-radius: 50%;
     display: grid; place-items: center;
@@ -316,9 +310,9 @@
     #app > .top { flex-direction: column; height: auto; width: 44px; }
     #app > .top .brand { display: none; }
     .bar { height: auto; padding: 0; grid-template-columns: 1fr; grid-template-rows: 1fr auto 1fr; justify-items: center; }
-    .side { grid-row: 1; justify-self: center; align-self: start; }
+    .rightcell { grid-row: 1; align-self: stretch; flex-direction: column-reverse; justify-content: space-between; padding: 0 0 14px; }
     .shutter { grid-row: 2; width: 72px; height: 72px; }
-    .stack { grid-row: 3; justify-self: center; align-self: end; }
+    .leftcell { grid-row: 3; align-self: stretch; flex-direction: column-reverse; justify-content: space-between; padding: 14px 0 0; }
 
     .sheet {
       grid-template-columns: 1fr minmax(280px, 340px); grid-template-rows: auto 1fr; column-gap: 20px;
@@ -350,10 +344,6 @@
       <div class="flash" id="flash"></div>
       <div class="hint" id="hint">take at least 2</div>
       <img class="onion" id="ghost" alt="">
-      <button class="ghostbtn" id="ghostBtn" aria-pressed="true" aria-label="Overlay last photo" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
-      </button>
-      <div class="lenses" id="lenses"></div>
       <div class="zoomtag" id="zoomtag">1×</div>
       <div class="gate" id="gate">
         <h1>Snap. Snap. Loop.</h1>
@@ -366,15 +356,23 @@
   </div>
 
   <div class="bar">
-    <div class="stack" id="stack"><div class="count empty" id="count">0</div></div>
+    <div class="leftcell">
+      <div class="stack" id="stack"><div class="count empty" id="count">0</div></div>
+      <button class="lens" id="lens" aria-label="Switch lens" hidden>1×</button>
+    </div>
     <button class="shutter" id="shutter" aria-label="Take photo" disabled><i></i></button>
-    <div class="side" id="side">
+    <div class="rightcell">
+      <button class="ghostbtn" id="ghostBtn" aria-pressed="true" aria-label="Overlay last photo" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      </button>
+      <div class="side" id="side">
       <button class="flip" id="flip" aria-label="Switch camera">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3l-2-3H9L7 7H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1z"/><path d="M9 13a3 3 0 0 1 5.2-2M15 12.5a3 3 0 0 1-5.2 2"/><path d="M14.5 9.5v1.6h-1.6M9.5 15.6V14h1.6"/></svg>
       </button>
       <button class="done" id="done" aria-label="Make GIF">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
       </button>
+    </div>
     </div>
   </div>
 </div>
@@ -556,7 +554,7 @@ $('useNative').addEventListener('click', () => {
   stopCamera();
   $('gate').classList.add('gone');
   shutter.disabled = false;
-  $('lenses').textContent = '';
+  $('lens').hidden = true;
   $('hint').textContent = 'shutter opens the camera app';
   $('nativeCam').click();
 });
@@ -597,39 +595,33 @@ async function listCams() {
   });
 }
 function renderLenses() {
-  const box = $('lenses');
-  box.textContent = '';
+  const btn = $('lens');
   const mine = state.cams.filter((c) => c.facing === state.facing);
   const order = { ultra: 0, wide: 1, tele: 2 };
   const named = mine.every((c) => c.label) && new Set(mine.map((c) => c.kind)).size === mine.length;
-  const zoomLabel = () => `${state.zoom < 10 ? state.zoom.toFixed(1).replace(/\.0$/, '') : Math.round(state.zoom)}×`;
+  const zoomed = state.zoom > 1.05;
+  const z = `${state.zoom < 10 ? state.zoom.toFixed(1).replace(/\.0$/, '') : Math.round(state.zoom)}×`;
 
   if (mine.length > 1) {
     const list = named ? [...mine].sort((a, b) => order[a.kind] - order[b.kind]) : mine;
-    list.forEach((c, i) => {
-      const b = document.createElement('button');
-      const on = c.id === state.deviceId;
-      b.setAttribute('aria-pressed', on);
-      b.setAttribute('aria-label', c.label || `camera ${i + 1}`);
-      b.textContent = on && state.zoom !== 1 ? zoomLabel()
-        : named ? { ultra: '.5', wide: '1×', tele: 'tele' }[c.kind] : `${i + 1}`;
-      b.addEventListener('click', () => {
-        if (c.id === state.deviceId) { setZoom(1); return; }
-        state.deviceId = c.id; startCamera();
-      });
-      box.appendChild(b);
-    });
+    const i = Math.max(0, list.findIndex((c) => c.id === state.deviceId));
+    const cur = list[i];
+    btn.textContent = zoomed ? z : named ? { ultra: '.5', wide: '1×', tele: 'tele' }[cur.kind] : `${i + 1}`;
+    btn.setAttribute('aria-label', `lens: ${cur.label || `camera ${i + 1}`}. tap for next`);
+    btn.onclick = () => {
+      if (zoomed) { setZoom(1); return; } // first tap drops back to the lens's own 1×
+      state.deviceId = list[(i + 1) % list.length].id;
+      startCamera();
+    };
   } else {
-    // one lens: offer zoom presets instead
-    [1, 2, 3].forEach((z) => {
-      const b = document.createElement('button');
-      const on = Math.abs(state.zoom - z) < 0.05 || (z === 1 && state.zoom < 1.5) || (z === 2 && state.zoom >= 1.5 && state.zoom < 2.5) || (z === 3 && state.zoom >= 2.5);
-      b.setAttribute('aria-pressed', on);
-      b.textContent = on ? zoomLabel() : `${z}`;
-      b.addEventListener('click', () => setZoom(z));
-      box.appendChild(b);
-    });
+    // one lens: cycle zoom steps instead
+    const steps = [1, 2, 3].filter((v) => v <= zoomMax());
+    const next = steps.find((v) => v > state.zoom + 0.05) ?? steps[0];
+    btn.textContent = z;
+    btn.setAttribute('aria-label', `zoom ${z}. tap for ${next}×`);
+    btn.onclick = () => setZoom(next);
   }
+  btn.hidden = !state.stream;
 }
 
 /* ---------- zoom ---------- */
