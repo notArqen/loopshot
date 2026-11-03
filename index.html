@@ -362,7 +362,7 @@
       <div class="gate" id="gate">
         <h1>Snap. Snap. Loop.</h1>
         <p id="gateMsg">take a few photos, get a GIF in your camera roll.</p>
-        <button class="go" id="allow">Allow camera</button>
+        <button class="go" id="allow">Start camera</button>
         <button class="alt" id="useNative" hidden>use the camera app instead</button>
         <input type="file" id="nativeCam" accept="image/*" capture="environment" hidden>
       </div>
@@ -1047,11 +1047,7 @@ $('save').addEventListener('click', async () => {
 syncAspect();
 renderCount();
 renderGhost();
-if (standalone) {
-  $('allow').textContent = 'Start camera';
-} else {
-  startCamera();
-}
+// camera waits for a tap, everywhere
 </script>
 </body>
 </html>
