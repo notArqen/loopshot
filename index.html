@@ -684,7 +684,7 @@ function applyZoom(now) {
   };
   if (now) run(); else if (!zoomRaf) zoomRaf = requestAnimationFrame(run);
 }
-// one finger: slide up to zoom in, down to zoom out. exponential, so every 160px doubles or halves.
+// one finger: slide up to zoom in, down to zoom out. exponential, so every 80px doubles or halves.
 (function bindSlideZoom() {
   const el = $('finder');
   let id = null, startY = 0, startZoom = 1;
@@ -695,7 +695,7 @@ function applyZoom(now) {
   });
   el.addEventListener('pointermove', (e) => {
     if (e.pointerId !== id) return;
-    setZoom(startZoom * 2 ** ((startY - e.clientY) / 160));
+    setZoom(startZoom * 2 ** ((startY - e.clientY) / 80));
   });
   const up = (e) => { if (e.pointerId === id) id = null; };
   el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
