@@ -98,6 +98,15 @@
   .how ul { list-style: none; display: grid; gap: 9px; font-size: 15px; color: var(--dim); margin-bottom: 18px; }
   .how b { color: var(--fg); }
   .how .go { width: 100%; }
+  .install .why { font-size: 15px; color: var(--dim); margin-bottom: 14px; }
+  .install ol { list-style: none; counter-reset: step; display: grid; gap: 10px; font-size: 15px; color: var(--dim); margin-bottom: 18px; }
+  .install li { counter-increment: step; position: relative; padding-left: 34px; min-height: 24px; line-height: 1.45; }
+  .install li::before {
+    content: counter(step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 13px; font-weight: 700;
+    background: var(--accent); color: #000;
+  }
+  .install .ico { width: 17px; height: 17px; vertical-align: -3px; color: #0a84ff; }
   .brand b { color: var(--accent); }
 
   /* viewfinder */
@@ -394,6 +403,23 @@
 </head>
 <body>
 <div class="screenflash" id="screenflash"></div>
+<dialog class="how install" id="install" aria-labelledby="installTitle">
+  <h2 id="installTitle">install it first</h2>
+  <p class="why">you're in the browser. as a home-screen app it opens full screen, with no browser bars in the way, and works like a real camera app.</p>
+  <ol id="installSteps"></ol>
+  <button class="go" id="installClose">Got it</button>
+</dialog>
+<template id="stepsIOS">
+  <li class="notsafari">open this page in <b>Safari</b></li>
+  <li>tap <b>Share</b> <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Share"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> (on newer iPhones it's inside the <b>⋯</b> menu)</li>
+  <li>scroll down, tap <b>Add to Home Screen</b></li>
+  <li>tap <b>Add</b>, then open <b>loopshot</b> from your home screen</li>
+</template>
+<template id="stepsAndroid">
+  <li>tap the <b>⋮</b> menu in Chrome</li>
+  <li>tap <b>Add to Home screen</b> or <b>Install app</b></li>
+  <li>open <b>loopshot</b> from your home screen</li>
+</template>
 <dialog class="how" id="how" aria-labelledby="howTitle">
   <h2 id="howTitle">how it works</h2>
   <ul>
@@ -692,6 +718,25 @@ $('useNative').addEventListener('click', () => {
   $('hint').textContent = 'shutter opens the camera app';
   $('nativeCam').click();
 });
+/* ---------- install nudge ---------- */
+// in a phone browser, point at the home-screen app. installed, or on a computer: say nothing.
+(function installNudge() {
+  if (standalone) return;
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const android = /Android/.test(ua);
+  if (!ios && !android) return;
+  const steps = $(ios ? 'stepsIOS' : 'stepsAndroid').content.cloneNode(true);
+  // other ios browsers and in-app browsers (instagram, tiktok…) can't install, safari can
+  const safari = ios && /Safari\//.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA\/|FBAN|FBAV|Instagram|TikTok|musical_ly|Snapchat|Line\//.test(ua);
+  if (safari) steps.querySelector('.notsafari')?.remove();
+  $('installSteps').replaceChildren(steps);
+  $('installClose').addEventListener('click', () => $('install').close());
+  // after first paint: a modal opened mid-load can get dropped
+  const show = () => setTimeout(() => { if (!$('install').open) $('install').showModal(); }, 350);
+  if (document.readyState === 'complete') show(); else addEventListener('load', show, { once: true });
+})();
+
 /* ---------- how it works ---------- */
 try { if (!localStorage.getItem('loopshot.seenHow')) $('info').classList.add('fresh'); } catch {}
 $('info').addEventListener('click', () => {
