@@ -450,6 +450,9 @@
   }
   .seg button { position: relative; font-size: 14px; color: var(--dim); transition: color 200ms ease; }
   .seg button[aria-checked=true] { color: var(--fg); }
+  .seg button:disabled { opacity: .3; cursor: default; }
+  .row .lab span.capnote { color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row .lab .capnote:empty { display: none; }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
   .actions { display: grid; grid-template-columns: auto 1fr; gap: 12px; margin-top: 6px; }
@@ -639,7 +642,7 @@
     </div>
     <div class="two">
       <div class="row">
-        <div class="lab"><span>Playback</span></div>
+        <div class="lab"><span>Playback</span><span class="capnote" id="modeNote"></span></div>
         <div class="seg" id="mode" role="radiogroup" style="--n:2">
           <div class="pill"></div>
           <button role="radio" data-v="loop">Loop</button>
@@ -647,7 +650,7 @@
         </div>
       </div>
       <div class="row">
-        <div class="lab"><span>Size</span></div>
+        <div class="lab"><span>Size</span><span class="capnote" id="sizeNote"></span></div>
         <div class="seg" id="size" role="radiogroup" style="--n:3">
           <div class="pill"></div>
           <button role="radio" data-v="320">S</button>
@@ -685,6 +688,9 @@ import { GIFEncoder, quantize, applyPalette } from 'https://unpkg.com/gifenc@1.0
 const $ = (id) => document.getElementById(id);
 const video = $('video'), shutter = $('shutter'), side = $('side');
 const MAX_SHOTS = 200, WARN_SHOTS = 100, HOT_SHOTS = 150; // shots live as ~100KB jpegs, not 1.2MB canvases, so 200 fits
+// uploads can go past the camera's 200: smaller gifs cost less per frame, so each size has its own ceiling
+const IMPORT_MAX = 400;
+const SIZE_CAP = { 320: 400, 480: 300, 640: 200 };
 const CAP_LONG = 640, CAP_SHORT = 480; // stored frame size, 4:3 either way up
 const DIGITAL_MAX = 5;
 const landscapeMQ = matchMedia('(orientation: landscape)');
@@ -881,7 +887,7 @@ $('how').addEventListener('click', (e) => { if (e.target === $('how')) $('how').
 
 // a video → frames. up to 4s plays at 25fps; longer clips thin out, and past 8s only the start is used.
 async function addVideo(file) {
-  const room = MAX_SHOTS - state.shots.length;
+  const room = IMPORT_MAX - state.shots.length;
   if (room < 2) return 0;
   const v = document.createElement('video');
   v.muted = true; v.playsInline = true; v.preload = 'auto';
@@ -920,7 +926,7 @@ async function addVideo(file) {
 // existing photos (and videos) → frames, in the order picked. two or more go straight to the gif.
 $('upload').addEventListener('click', () => $('pick').click());
 $('pick').addEventListener('change', async (e) => {
-  const files = [...(e.target.files || [])].slice(0, MAX_SHOTS - state.shots.length);
+  const files = [...(e.target.files || [])].slice(0, IMPORT_MAX - state.shots.length);
   e.target.value = '';
   let bad = 0;
   for (const f of files) {
@@ -1423,6 +1429,7 @@ function openSheet() {
   const s = $('sheet');
   s.classList.add('open'); s.setAttribute('aria-hidden', 'false');
   renderFlash();
+  fitCaps();
   build();
 }
 function closeSheet() {
@@ -1491,6 +1498,7 @@ $('trimDone').addEventListener('click', () => {
   if (trim.a === 0 && trim.b === n - 1) return;
   state.shots = state.shots.slice(trim.a, trim.b + 1); state.ver++;
   rebuildThumbs(); renderCount(); renderGhost();
+  fitCaps();
   build();
 });
 
@@ -1544,6 +1552,7 @@ function paintSpeed() {
   });
 })();
 
+const segPaint = {};
 function bindSeg(id, key, parse) {
   const seg = $(id), btns = [...seg.querySelectorAll('button')], pill = seg.querySelector('.pill');
   const paint = () => {
@@ -1556,9 +1565,25 @@ function bindSeg(id, key, parse) {
   btns.forEach((b) => b.addEventListener('click', () => {
     const v = parse(b.dataset.v);
     if (v === state[key]) return;
-    state[key] = v; paint(); schedule();
+    state[key] = v; fitCaps(); paint(); schedule();
   }));
+  segPaint[id] = paint;
   paint();
+}
+// only imports can go past the camera's 200; up to that, every size and bounce work as they always did.
+// past it, each size has its own ceiling and bounce (which plays everything twice) is off.
+function fitCaps() {
+  const n = state.shots.length, over = n > MAX_SHOTS, sizes = [320, 480, 640];
+  const bounce = $('mode').querySelector('[data-v=bounce]');
+  bounce.disabled = over;
+  if (over && state.mode === 'bounce') state.mode = 'loop';
+  for (const w of sizes) $('size').querySelector(`[data-v="${w}"]`).disabled = over && n > SIZE_CAP[w];
+  if (over && n > SIZE_CAP[state.width]) state.width = [...sizes].reverse().find((w) => n <= SIZE_CAP[w]) ?? 320;
+  // say what it takes to get the next size up back
+  const up = over && sizes.find((w) => w > state.width && n > SIZE_CAP[w]);
+  $('sizeNote').textContent = up ? `${{ 320: 'S', 480: 'M', 640: 'L' }[up]} ≤${SIZE_CAP[up]}` : '';
+  $('modeNote').textContent = over ? `bounce ≤${MAX_SHOTS}` : '';
+  segPaint.mode?.(); segPaint.size?.();
 }
 bindSeg('mode', 'mode', String);
 bindSeg('size', 'width', Number);
