@@ -72,6 +72,60 @@
   .chip svg { width: 18px; height: 18px; }
   .chip[hidden] { display: inline-flex; opacity: 0; pointer-events: none; }
   .brand { font-weight: 700; letter-spacing: -.01em; font-size: 17px; }
+  /* the logo is the rolls button: tap it for saved shoots */
+  button.brand {
+    display: grid; justify-items: center; gap: 1px; padding: 4px 12px; border-radius: 14px;
+    transition: transform 160ms var(--ease-out), background-color 200ms ease;
+  }
+  button.brand:active { transform: scale(0.96); background: var(--glass); }
+  .brand .line { display: inline-flex; align-items: center; gap: 5px; }
+  .brand .rollico { width: 15px; height: 15px; opacity: .55; }
+  .brand .rollname { font-size: 11px; font-weight: 600; color: var(--dim); letter-spacing: 0; display: inline-flex; align-items: center; gap: 4px; }
+  .brand .rollname:empty { display: none; }
+  .brand .rollname::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  /* rolls drawer: drops from the top, under the logo that opened it */
+  .drawer {
+    margin: 0 auto auto; width: 100%; max-width: 460px; max-height: 100dvh; overflow: hidden;
+    padding: 0; border: 0; border-radius: 0 0 26px 26px;
+    background: #161618; color: var(--fg);
+    transform: translateY(-100%);
+    transition: transform 320ms var(--ease-drawer), overlay 320ms allow-discrete, display 320ms allow-discrete;
+  }
+  .drawer[open] { transform: none; }
+  @starting-style { .drawer[open] { transform: translateY(-100%); } }
+  .drawer::backdrop { background: rgba(0,0,0,0); transition: background-color 320ms ease, overlay 320ms allow-discrete, display 320ms allow-discrete; }
+  .drawer[open]::backdrop { background: rgba(0,0,0,.55); }
+  @starting-style { .drawer[open]::backdrop { background: rgba(0,0,0,0); } }
+  .drawer .in { padding: var(--top) 16px 16px; } /* same clearance as the top bar, under the ios status-bar blur */
+  .drawer h2 { font-size: 20px; letter-spacing: -.01em; }
+  .drawer .sub { font-size: 14px; color: var(--dim); margin: 4px 0 14px; }
+  .drawer .cur { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .drawer .cur:empty { display: none; }
+  .drawer .cur p { flex: 1; font-size: 14px; color: var(--dim); }
+  .drawer .cur b { color: var(--fg); }
+  .drawer .cur .btn { flex: none; height: 40px; padding: 0 16px; font-size: 15px; }
+  .rolllist { list-style: none; display: grid; gap: 8px; }
+  .rolllist:empty::after { content: 'nothing saved yet. take a photo, then save it here and come back to it later.'; font-size: 14px; color: var(--dim); }
+  .rolllist li { display: flex; align-items: center; gap: 6px; border-radius: 16px; background: rgba(255,255,255,.05); }
+  .rolllist li.active { box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .rolllist .open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 10px 12px; text-align: left; transition: transform 160ms var(--ease-out); }
+  .rolllist .open:active { transform: scale(0.98); }
+  .rolllist .info { min-width: 0; display: grid; gap: 2px; }
+  .rolllist .name { font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rolllist .when { font-size: 13px; color: var(--dim); }
+  .rolllist .confirm .when { color: var(--accent); }
+  /* cover: latest shot on top, the two before it fanned out behind */
+  .pile { position: relative; flex: none; width: 50px; height: 56px; }
+  .pile img { position: absolute; left: 5px; top: 4px; width: 40px; height: 48px; object-fit: cover; border-radius: 7px; box-shadow: 0 1px 4px rgba(0,0,0,.5); background: #222; }
+  .pile img:nth-last-child(2) { transform: rotate(-8deg) translate(-3px, 1px); opacity: .85; }
+  .pile img:nth-last-child(3) { transform: rotate(7deg) translate(3px, 1px); opacity: .7; }
+  .rolllist .del { flex: none; width: 44px; height: 44px; margin-right: 6px; border-radius: 50%; display: grid; place-items: center; color: var(--dim); transition: transform 160ms var(--ease-out), color 200ms ease, background-color 200ms ease; }
+  .rolllist .del svg { width: 18px; height: 18px; }
+  .rolllist .del:active { transform: scale(0.9); }
+  .rolllist .del.armed { color: #fff; background: #ff3b30; }
+  .drawer .cap { font-size: 13px; color: var(--dim); margin-top: 10px; text-align: center; }
+  .drawer .cap:empty { display: none; }
   /* info before the first shot, undo after: same spot */
   .slot { display: grid; place-items: center; }
   .slot > .chip { grid-area: 1 / 1; }
@@ -429,7 +483,8 @@
   @media (orientation: landscape) and (max-height: 600px) {
     #app { grid-template-rows: 1fr; grid-template-columns: 44px 1fr 96px; column-gap: 12px; padding-top: calc(var(--sat) + 12px); padding-bottom: calc(var(--sab) + 12px); }
     #app > .top { flex-direction: column; height: auto; width: 44px; }
-    #app > .top .brand { display: none; }
+    #app > .top .brand .word, #app > .top .brand .rollname { display: none; }
+    #app > .top .brand .rollico { opacity: .85; width: 20px; height: 20px; }
     .bar { height: auto; padding: 0; grid-template-columns: 1fr; grid-template-rows: 1fr auto 1fr; justify-items: center; }
     .rightcell { grid-row: 1; align-self: stretch; grid-template-columns: none; grid-template-rows: var(--edge) 1fr; }
     .rightcell > .side { grid-row: 1; }
@@ -470,6 +525,13 @@
   <li>tap <b>Add to Home screen</b> or <b>Install app</b></li>
   <li>open <b>loopshot</b> from your home screen</li>
 </template>
+<dialog class="drawer" id="rolls" aria-labelledby="rollsTitle"><div class="in">
+  <h2 id="rollsTitle">rolls</h2>
+  <p class="sub">save a shoot, close the app, come back and keep going.</p>
+  <div class="cur" id="rollCur"></div>
+  <ul class="rolllist" id="rollList"></ul>
+  <p class="cap" id="rollCap"></p>
+</div></dialog>
 <dialog class="how" id="how" aria-labelledby="howTitle">
   <h2 id="howTitle">how it works</h2>
   <ul>
@@ -477,6 +539,7 @@
     <li><b>hold</b> it for a burst</li>
     <li><b>tap, then hold</b> to film: every frame, like a video</li>
     <li><b>slide up or down</b> on the picture to zoom</li>
+    <li><b>tap the logo</b> to save a shoot and pick it up later, like one photo every hour</li>
     <li><b>⚡</b> top left, when your phone allows it: flashlight, or a screen flash on the selfie camera</li>
     <li><b>the stacked squares</b> by the shutter overlay your last photo, to line up the next. set it before you start if you like</li>
     <li><b>tap the pile</b> of photos to start over</li>
@@ -491,7 +554,10 @@
     <button class="chip" id="flashBtn" aria-label="Flash" aria-pressed="false" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z"/></svg>
     </button>
-    <div class="brand">loop<b>shot</b></div>
+    <button class="brand" id="rollsBtn" aria-label="Saved rolls" aria-haspopup="dialog">
+      <span class="line"><span class="word">loop<b>shot</b></span><svg class="rollico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+      <span class="rollname" id="rollName"></span>
+    </button>
     <div class="slot">
       <button class="chip" id="info" aria-label="How it works">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/></svg>
@@ -644,6 +710,9 @@ const state = {
   job: 0,
 };
 try { state.ghost = localStorage.getItem('loopshot.onion') === '1'; } catch {}
+// every change to the shots goes through ver, so that's where an open roll hears about it
+let shotsVer = 0;
+Object.defineProperty(state, 'ver', { get: () => shotsVer, set: (v) => { shotsVer = v; queueRollSave(); } });
 
 /* ---------- page lock (belt + braces for mobile webkit) ---------- */
 document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
@@ -1174,7 +1243,180 @@ function renderCount() {
   $('hint').textContent = n === 1 ? 'one more' : 'take at least 2';
 }
 $('undo').addEventListener('click', () => { state.shots.pop(); state.ver++; rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
-$('stack').addEventListener('click', () => { state.shots = []; state.ver++; rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
+$('stack').addEventListener('click', () => { detachRoll(); state.shots = []; state.ver++; rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
+
+/* ---------- rolls: shoots saved to come back to ---------- */
+// indexeddb, not localStorage: a full roll is ~25MB of jpegs and localStorage tops out near 5MB
+const MAX_ROLLS = 5;
+const roll = { id: null, name: '', created: 0, stored: new Set(), saving: null, again: false, timer: 0 };
+let rollsDB;
+const openRollsDB = () => rollsDB ??= new Promise((res, rej) => {
+  const r = indexedDB.open('loopshot', 1);
+  r.onupgradeneeded = () => {
+    r.result.createObjectStore('rolls', { keyPath: 'id' });
+    r.result.createObjectStore('shots', { keyPath: 'id' }).createIndex('roll', 'roll');
+  };
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => { rollsDB = null; rej(r.error); };
+});
+const idb = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const txDone = (t) => new Promise((res, rej) => { t.oncomplete = res; t.onerror = t.onabort = () => rej(t.error); });
+const uid = () => crypto.randomUUID?.() ?? Date.now().toString(36) + Math.random().toString(36).slice(2);
+const rollTitle = (t) => {
+  const d = new Date(t);
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' }).toLowerCase()} · ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()}`;
+};
+const ago = (t) => {
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  if (m < 60 * 24) return `${Math.round(m / 60)} h ago`;
+  return `${Math.round(m / 1440)} d ago`;
+};
+// covers are small copies of the last three shots, so the list never loads full frames
+async function coverOf(shot) {
+  const im = new Image(); im.src = shot.thumb; await im.decode();
+  const c = document.createElement('canvas'), k = 120 / Math.max(im.width, im.height);
+  c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+  c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.7);
+}
+
+function queueRollSave() {
+  if (!roll.id) return;
+  clearTimeout(roll.timer); roll.timer = setTimeout(flushRoll, 150);
+}
+async function flushRoll() {
+  clearTimeout(roll.timer);
+  if (!roll.id) return;
+  if (roll.saving) { roll.again = true; return roll.saving; }
+  roll.saving = writeRoll().catch((e) => toast(`couldn’t save the roll (${e?.name || e})`));
+  await roll.saving;
+  roll.saving = null;
+  if (roll.again) { roll.again = false; return flushRoll(); }
+}
+async function writeRoll() {
+  const id = roll.id, shots = state.shots.slice();
+  const ids = shots.map((s) => (s.id ??= uid()));
+  const covers = await Promise.all(shots.slice(-3).map((s) => (s.cover ??= coverOf(s))));
+  const db = await openRollsDB();
+  const t = db.transaction(['rolls', 'shots'], 'readwrite');
+  const ss = t.objectStore('shots'), keep = new Set(ids);
+  for (const s of shots) if (!roll.stored.has(s.id)) ss.put({ id: s.id, roll: id, width: s.width, height: s.height, thumb: s.thumb });
+  for (const old of roll.stored) if (!keep.has(old)) ss.delete(old);
+  t.objectStore('rolls').put({ id, name: roll.name, created: roll.created, updated: Date.now(), ar: state.ar, delay: state.delay, ids, covers });
+  await txDone(t);
+  if (roll.id === id) roll.stored = keep;
+}
+function detachRoll() {
+  clearTimeout(roll.timer);
+  roll.id = null; roll.stored = new Set();
+  renderRollName();
+}
+function renderRollName() { $('rollName').textContent = roll.id ? roll.name : ''; }
+
+async function listRolls() {
+  const db = await openRollsDB();
+  const all = await idb(db.transaction('rolls').objectStore('rolls').getAll());
+  return all.sort((a, b) => b.updated - a.updated);
+}
+async function saveNewRoll() {
+  const now = Date.now();
+  roll.id = uid(); roll.name = rollTitle(now); roll.created = now; roll.stored = new Set();
+  navigator.storage?.persist?.().catch(() => {}); // ask the browser not to clear it under storage pressure
+  renderRollName();
+  await flushRoll();
+  renderRolls();
+}
+async function openRoll(id) {
+  await roll.saving;
+  const db = await openRollsDB();
+  const t = db.transaction(['rolls', 'shots']);
+  const [r, rows] = await Promise.all([idb(t.objectStore('rolls').get(id)), idb(t.objectStore('shots').index('roll').getAll(id))]);
+  if (!r) return renderRolls();
+  const byId = new Map(rows.map((x) => [x.id, x]));
+  const shots = r.ids.map((i) => byId.get(i)).filter(Boolean).map(({ id, width, height, thumb }) => ({ id, width, height, thumb }));
+  detachRoll(); // so the settings below don't write into whatever roll was open before
+  if (r.delay) { state.delay = r.delay; paintSpeed(); }
+  if (r.ar) setAspect(r.ar);
+  state.shots = shots; shotsVer++; // straight to the counter: opening isn't an edit
+  Object.assign(roll, { id: r.id, name: r.name, created: r.created, stored: new Set(shots.map((x) => x.id)) });
+  rebuildThumbs(); renderCount(); renderGhost(); renderRollName();
+  $('rolls').close();
+}
+async function deleteRoll(id) {
+  const db = await openRollsDB();
+  const t = db.transaction(['rolls', 'shots'], 'readwrite');
+  const ss = t.objectStore('shots');
+  for (const k of await idb(ss.index('roll').getAllKeys(id))) ss.delete(k);
+  t.objectStore('rolls').delete(id);
+  await txDone(t);
+  if (roll.id === id) detachRoll(); // the shots on screen stay, they're just not saved anywhere now
+  renderRolls();
+}
+
+const ICON_DEL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+async function renderRolls() {
+  let rolls = [];
+  try { rolls = await listRolls(); } catch { $('rollCap').textContent = 'this browser won’t let loopshot save anything.'; }
+  const n = state.shots.length, full = rolls.length >= MAX_ROLLS;
+  const cur = $('rollCur'); cur.replaceChildren();
+  if (roll.id) {
+    cur.innerHTML = `<p>saving to <b></b> as you shoot</p><button class="btn ghost" id="rollNew">new roll</button>`;
+    cur.querySelector('b').textContent = roll.name;
+    cur.querySelector('#rollNew').onclick = () => { $('stack').click(); renderRolls(); };
+  } else if (n) {
+    cur.innerHTML = `<p><b>${n} unsaved</b> ${n === 1 ? 'photo' : 'photos'}</p><button class="btn" id="rollSave">save</button>`;
+    const b = cur.querySelector('#rollSave');
+    b.disabled = full;
+    b.onclick = saveNewRoll;
+  }
+  $('rollCap').textContent = full && !roll.id && n ? `${MAX_ROLLS} rolls is the max. delete one to save this.` : '';
+
+  const list = $('rollList'); list.replaceChildren();
+  for (const r of rolls) {
+    const li = document.createElement('li');
+    li.classList.toggle('active', r.id === roll.id);
+    const open = document.createElement('button');
+    open.className = 'open';
+    const pile = document.createElement('span'); pile.className = 'pile';
+    for (const src of r.covers || []) { const im = document.createElement('img'); im.src = src; im.alt = ''; pile.append(im); }
+    const info = document.createElement('span'); info.className = 'info';
+    const name = document.createElement('span'); name.className = 'name'; name.textContent = r.name;
+    const meta = document.createElement('span'); meta.className = 'when';
+    const count = `${r.ids.length} ${r.ids.length === 1 ? 'photo' : 'photos'} · ${ago(r.updated)}`;
+    meta.textContent = r.id === roll.id ? `${count} · open now` : count;
+    info.append(name, meta); open.append(pile, info);
+    // opening another roll replaces what's on screen; if that's unsaved, make them tap twice
+    open.onclick = () => {
+      if (r.id === roll.id) return $('rolls').close();
+      if (!roll.id && n && !open.classList.contains('confirm')) {
+        open.classList.add('confirm');
+        meta.textContent = `tap again · drops your ${n} unsaved`;
+        setTimeout(() => { open.classList.remove('confirm'); meta.textContent = count; }, 3000);
+        return;
+      }
+      openRoll(r.id);
+    };
+    const del = document.createElement('button');
+    del.className = 'del'; del.innerHTML = ICON_DEL; del.setAttribute('aria-label', `Delete ${r.name}`);
+    del.onclick = () => {
+      if (!del.classList.contains('armed')) {
+        del.classList.add('armed'); meta.textContent = 'tap the bin again to delete';
+        setTimeout(() => { del.classList.remove('armed'); meta.textContent = count; }, 3000);
+        return;
+      }
+      deleteRoll(r.id);
+    };
+    li.append(open, del); list.append(li);
+  }
+}
+$('rollsBtn').addEventListener('click', () => { renderRolls(); $('rolls').showModal(); });
+// tap the dimmed area under the drawer to close it
+$('rolls').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+// closing the app right after a shot shouldn't lose it
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushRoll(); });
+addEventListener('pagehide', () => flushRoll());
 
 /* ---------- sheet ---------- */
 function openSheet() {
@@ -1269,6 +1511,7 @@ function paintSpeed() {
   el.querySelector('.knob').style.left = `${t * 100}%`;
   el.setAttribute('aria-valuenow', state.delay);
   el.setAttribute('aria-valuetext', `${state.delay} milliseconds`);
+  queueRollSave();
   $('speedVal').textContent = state.delay < 1000 ? `${(state.delay / 1000).toFixed(2).replace(/^0/, '')}s / frame` : '1s / frame';
 }
 (function bindSlider() {
