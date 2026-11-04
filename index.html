@@ -126,6 +126,20 @@
     transform: scale(var(--dz, 1));
   }
   .finder video.mirror { transform: scaleX(-1) scale(var(--dz, 1)); }
+  /* heavy shoot: a red rim instead of a nag. pulses on crossing 100 and at the cap, then stays faint */
+  .finder::after {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2;
+    box-shadow: inset 0 0 0 2px rgba(255,59,48,0);
+    transition: box-shadow 300ms ease-out;
+  }
+  .finder.heavy::after { box-shadow: inset 0 0 0 2px rgba(255,59,48,.45); }
+  .finder.full::after { box-shadow: inset 0 0 0 3px rgba(255,59,48,.9); }
+  .finder.pulse::after { animation: redpulse 900ms ease-out; }
+  @keyframes redpulse {
+    0%, 60% { box-shadow: inset 0 0 0 4px rgba(255,59,48,1), inset 0 0 36px rgba(255,59,48,.55); }
+    30% { box-shadow: inset 0 0 0 3px rgba(255,59,48,.5), inset 0 0 12px rgba(255,59,48,.2); }
+  }
+  @media (prefers-reduced-motion: reduce) { .finder.pulse::after { animation: none; } }
 
   /* one lens button beside the shutter: tap cycles lenses (or zoom steps), slide on the viewfinder for anything between */
   /* each side: outer slot at the edge, inner control centred between it and the shutter */
@@ -590,7 +604,7 @@ import { GIFEncoder, quantize, applyPalette } from 'https://unpkg.com/gifenc@1.0
 
 const $ = (id) => document.getElementById(id);
 const video = $('video'), shutter = $('shutter'), side = $('side');
-const MAX_SHOTS = 160, WARN_SHOTS = 100; // shots live as ~100KB jpegs, not 1.2MB canvases, so 160 fits
+const MAX_SHOTS = 200, WARN_SHOTS = 100; // shots live as ~100KB jpegs, not 1.2MB canvases, so 200 fits
 const CAP_LONG = 640, CAP_SHORT = 480; // stored frame size, 4:3 either way up
 const DIGITAL_MAX = 5;
 const landscapeMQ = matchMedia('(orientation: landscape)');
@@ -1056,7 +1070,7 @@ function film() {
     const now = performance.now();
     if (now - last >= VIDEO_EVERY) {
       last = now;
-      if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}, the limit.`); return stopBurst(); }
+      if (state.shots.length >= MAX_SHOTS) { pulseFinder(); return stopBurst(); }
       addShot(grab(), true);
     }
     next();
@@ -1079,7 +1093,7 @@ shutter.addEventListener('lostpointercapture', stopBurst);
 shutter.addEventListener('click', (e) => { if (e.detail === 0) snap(); }); // keyboard only
 
 function snap() {
-  if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}, the limit.`); return false; }
+  if (state.shots.length >= MAX_SHOTS) { pulseFinder(); navigator.vibrate?.([20, 40, 20]); return false; }
   if (state.native) { $('nativeCam').click(); return false; }
   if (screenFlashOn()) {
     // light the face first, grab once the white has actually painted
@@ -1093,7 +1107,7 @@ function snap() {
 function addShot(c, quiet) {
   if (!c) return false;
   state.shots.push(c); state.ver++;
-  if (state.shots.length === WARN_SHOTS) toast(`${WARN_SHOTS} shots. the gif is getting heavy; ${MAX_SHOTS} is the limit.`);
+  if (state.shots.length === WARN_SHOTS || state.shots.length === MAX_SHOTS) pulseFinder();
   const f = $('flash');
   if (!quiet) {
     f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
@@ -1125,8 +1139,15 @@ function rebuildThumbs() {
     $('stack').insertBefore(t, $('count'));
   });
 }
+function pulseFinder() {
+  const f = $('finder');
+  f.classList.remove('pulse'); void f.offsetWidth; f.classList.add('pulse');
+}
+$('finder').addEventListener('animationend', (e) => { if (e.animationName === 'redpulse') e.currentTarget.classList.remove('pulse'); });
 function renderCount() {
   const n = state.shots.length, cnt = $('count');
+  $('finder').classList.toggle('heavy', n >= WARN_SHOTS && n < MAX_SHOTS);
+  $('finder').classList.toggle('full', n >= MAX_SHOTS);
   cnt.textContent = n;
   cnt.classList.toggle('empty', n === 0);
   cnt.classList.remove('bump'); void cnt.offsetWidth; if (n) cnt.classList.add('bump');
