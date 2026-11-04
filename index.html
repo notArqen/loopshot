@@ -780,7 +780,11 @@ function renderFlash() {
   btn.hidden = state.native || !state.stream || !(state.torch || state.facing === 'user');
   btn.setAttribute('aria-pressed', String(state.flash));
   btn.setAttribute('aria-label', state.torch ? 'Flashlight' : 'Screen flash');
-  if (state.torch) state.stream.getVideoTracks()[0]?.applyConstraints({ advanced: [{ torch: state.flash }] }).catch(() => {});
+  // the light only burns while you're actually shooting, never behind the editor
+  if (state.torch) setTorch(state.flash && !$('sheet').classList.contains('open'));
+}
+function setTorch(on) {
+  state.stream?.getVideoTracks()[0]?.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {});
 }
 $('flashBtn').addEventListener('click', () => { state.flash = !state.flash; renderFlash(); });
 const screenFlashOn = () => state.flash && !state.torch && state.facing === 'user';
@@ -1057,11 +1061,13 @@ $('stack').addEventListener('click', () => { state.shots = []; rebuildThumbs(); 
 function openSheet() {
   const s = $('sheet');
   s.classList.add('open'); s.setAttribute('aria-hidden', 'false');
+  renderFlash();
   build();
 }
 function closeSheet() {
   const s = $('sheet');
   s.classList.add('closing'); s.classList.remove('open'); s.setAttribute('aria-hidden', 'true');
+  renderFlash(); // flashlight back on if it was on
   setTimeout(() => s.classList.remove('closing'), 450);
 }
 $('done').addEventListener('click', () => { if (state.shots.length >= 2) openSheet(); });
