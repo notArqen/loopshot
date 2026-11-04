@@ -529,7 +529,7 @@ import { GIFEncoder, quantize, applyPalette } from 'https://unpkg.com/gifenc@1.0
 
 const $ = (id) => document.getElementById(id);
 const video = $('video'), shutter = $('shutter'), side = $('side');
-const MAX_SHOTS = 100; // ~1.2MB of canvas each; iOS safari kills tabs well past this
+const MAX_SHOTS = 160, WARN_SHOTS = 100; // shots live as ~100KB jpegs, not 1.2MB canvases, so 160 fits
 const CAP_LONG = 640, CAP_SHORT = 480; // stored frame size, 4:3 either way up
 const DIGITAL_MAX = 5;
 const landscapeMQ = matchMedia('(orientation: landscape)');
@@ -543,7 +543,8 @@ const state = {
   zoomCap: null,        // {min, max} when the track zooms in hardware
   ar: 0.75,             // capture aspect (w/h), locked once the first shot exists
   ghost: false,         // onion skin starts off
-  shots: [],            // canvases
+  shots: [],            // { width, height, thumb: jpeg data url }
+  ver: 0,               // bumps whenever shots change, so the encoder knows its cache is stale
   delay: 200,           // ms between frames
   flash: false,
   torch: false,         // track has a controllable torch
@@ -939,8 +940,10 @@ function drawFrame(src, vw, vh, dz, mirror) {
   const sx = (vw - sw) / 2, sy = (vh - sh) / 2;
   if (mirror) { ctx.translate(W, 0); ctx.scale(-1, 1); }
   ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
-  c.thumb = c.toDataURL('image/jpeg', 0.7);
-  return c;
+  // keep a near-lossless jpeg and let the canvas go: canvas memory is what gets ios tabs killed
+  const shot = { width: W, height: H, thumb: c.toDataURL('image/jpeg', 0.92) };
+  c.width = c.height = 0;
+  return shot;
 }
 
 // tap = one shot, hold = burst until release, tap-then-hold = video: every camera frame until release
@@ -973,7 +976,7 @@ function film() {
     const now = performance.now();
     if (now - last >= VIDEO_EVERY) {
       last = now;
-      if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}. plenty.`); return stopBurst(); }
+      if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}, the limit.`); return stopBurst(); }
       addShot(grab(), true);
     }
     next();
@@ -996,7 +999,7 @@ shutter.addEventListener('lostpointercapture', stopBurst);
 shutter.addEventListener('click', (e) => { if (e.detail === 0) snap(); }); // keyboard only
 
 function snap() {
-  if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}. plenty.`); return false; }
+  if (state.shots.length >= MAX_SHOTS) { toast(`that’s ${MAX_SHOTS}, the limit.`); return false; }
   if (state.native) { $('nativeCam').click(); return false; }
   if (screenFlashOn()) {
     // light the face first, grab once the white has actually painted
@@ -1009,7 +1012,8 @@ function snap() {
 }
 function addShot(c, quiet) {
   if (!c) return false;
-  state.shots.push(c);
+  state.shots.push(c); state.ver++;
+  if (state.shots.length === WARN_SHOTS) toast(`${WARN_SHOTS} shots. the gif is getting heavy; ${MAX_SHOTS} is the limit.`);
   const f = $('flash');
   if (!quiet) {
     f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
@@ -1054,8 +1058,8 @@ function renderCount() {
   $('hint').style.opacity = n >= 2 ? 0 : 1;
   $('hint').textContent = n === 1 ? 'one more' : 'take at least 2';
 }
-$('undo').addEventListener('click', () => { state.shots.pop(); rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
-$('stack').addEventListener('click', () => { state.shots = []; rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
+$('undo').addEventListener('click', () => { state.shots.pop(); state.ver++; rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
+$('stack').addEventListener('click', () => { state.shots = []; state.ver++; rebuildThumbs(); renderCount(); renderGhost(); syncAspect(); });
 
 /* ---------- sheet ---------- */
 function openSheet() {
@@ -1183,6 +1187,7 @@ function ditherFS(data, w, h, palette) {
   return out;
 }
 
+const enc = { key: null, palette: null, indexed: null };
 async function build() {
   const job = ++state.job;
   const n = state.shots.length;
@@ -1193,37 +1198,57 @@ async function build() {
   const s0 = state.shots[0], portrait = s0.width < s0.height;
   const w = portrait ? Math.round(state.width * s0.width / s0.height) : state.width;
   const h = portrait ? state.width : Math.round(state.width * s0.height / s0.width);
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  const ctx = c.getContext('2d', { willReadFrequently: true });
-  ctx.imageSmoothingQuality = 'high';
-
-  // scale every shot once
-  const frames = [];
-  for (const s of state.shots) {
-    ctx.drawImage(s, 0, 0, w, h);
-    frames.push(ctx.getImageData(0, 0, w, h).data);
-  }
-  await nextFrame(); if (job !== state.job) return;
-
-  // one shared palette across all frames, so colors don't shimmer between shots
-  const px = w * h, stride = Math.max(1, Math.floor((px * n) / (QUALITY[state.width] || QUALITY[480]).samples));
-  const sample = new Uint8ClampedArray(Math.ceil(px / stride) * n * 4);
-  let o = 0;
-  for (const f of frames) for (let i = 0; i < px; i += stride, o += 4) {
-    sample[o] = f[i * 4]; sample[o + 1] = f[i * 4 + 1]; sample[o + 2] = f[i * 4 + 2]; sample[o + 3] = 255;
-  }
   const q = QUALITY[state.width] || QUALITY[480];
-  const palette = quantize(sample.subarray(0, o), q.colors, { format: q.format });
+  const key = `${state.ver}|${w}x${h}`;
 
-  const order = frames.map((_, i) => i);
+  // palette + indexed frames only depend on the shots and the size; speed/mode just rewrite the file
+  if (enc.key !== key) {
+    enc.key = null; enc.indexed = null; // drop the old set before building a new one
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingQuality = 'high';
+    const px = w * h;
+    // small sets keep their pixels between passes; big ones decode twice instead of holding it all
+    const keep = n * px * 4 <= 64e6, frames = [];
+    const pixels = async (i) => {
+      if (frames[i]) return frames[i];
+      const im = new Image(); im.src = state.shots[i].thumb;
+      await im.decode();
+      ctx.drawImage(im, 0, 0, w, h);
+      const d = ctx.getImageData(0, 0, w, h).data;
+      if (keep) frames[i] = d;
+      return d;
+    };
+
+    // one shared palette across all frames, so colors don't shimmer between shots
+    const stride = Math.max(1, Math.floor((px * n) / q.samples));
+    const sample = new Uint8ClampedArray(Math.ceil(px / stride) * n * 4);
+    let o = 0;
+    for (let k = 0; k < n; k++) {
+      const f = await pixels(k);
+      if (job !== state.job) return;
+      for (let i = 0; i < px; i += stride, o += 4) {
+        sample[o] = f[i * 4]; sample[o + 1] = f[i * 4 + 1]; sample[o + 2] = f[i * 4 + 2]; sample[o + 3] = 255;
+      }
+    }
+    const palette = quantize(sample.subarray(0, o), q.colors, { format: q.format });
+
+    const indexed = [];
+    for (let k = 0; k < n; k++) {
+      const f = await pixels(k);
+      indexed.push(q.dither ? ditherFS(f, w, h, palette) : applyPalette(f, palette, q.format));
+      frames[k] = null;
+      await nextFrame(); if (job !== state.job) return;
+    }
+    c.width = c.height = 0;
+    Object.assign(enc, { key, palette, indexed });
+  }
+  const { palette, indexed } = enc;
+
+  const order = indexed.map((_, i) => i);
   if (state.mode === 'bounce') for (let i = n - 2; i >= 1; i--) order.push(i);
 
-  const indexed = [];
-  for (const f of frames) {
-    indexed.push(q.dither ? ditherFS(f, w, h, palette) : applyPalette(f, palette, q.format));
-    await nextFrame(); if (job !== state.job) return;
-  }
   const gif = GIFEncoder();
   order.forEach((i, k) => {
     gif.writeFrame(indexed[i], w, h, k === 0 ? { palette, delay: state.delay, repeat: 0 } : { delay: state.delay });
