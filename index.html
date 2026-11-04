@@ -33,7 +33,8 @@
     --ctl: 48px;          /* every round control beside the shutter */
     --edge: 56px;         /* outer slots: photo stack, flip/done */
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
+  .how, .how * { -webkit-user-select: text; user-select: text; }
   /* lock the page: no rubber-banding, no pinch, no selection, no callouts */
   html, body {
     position: fixed; inset: 0;
@@ -241,6 +242,7 @@
   @keyframes bump { 40% { transform: scale(1.25); } }
 
   .shutter {
+    touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
     width: 80px; height: 80px; border-radius: 50%;
     border: 4px solid #fff; padding: 4px;
     display: grid; place-items: center;
@@ -984,6 +986,8 @@ shutter.addEventListener('pointerup', () => {
   if (!was) { snap(); lastTapUp = performance.now(); }
 });
 shutter.addEventListener('pointercancel', stopBurst);
+// tap-then-hold is also ios's magnifier gesture. eating touchstart stops the loupe; pointer events still fire.
+shutter.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
 shutter.addEventListener('lostpointercapture', stopBurst);
 shutter.addEventListener('click', (e) => { if (e.detail === 0) snap(); }); // keyboard only
 
