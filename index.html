@@ -126,20 +126,35 @@
     transform: scale(var(--dz, 1));
   }
   .finder video.mirror { transform: scaleX(-1) scale(var(--dz, 1)); }
-  /* heavy shoot: a red rim instead of a nag. pulses on crossing 100 and at the cap, then stays faint */
+  /* heavy shoot, in three stages: 100+ throbs red, 150+ glows steady, 200 flashes the picture itself red */
+  .finder { transition: box-shadow 400ms ease-out; }
   .finder::after {
     content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2;
-    box-shadow: inset 0 0 0 2px rgba(255,59,48,0);
-    transition: box-shadow 300ms ease-out;
+    background: rgba(255,40,30,0);
+    box-shadow: inset 0 0 0 0 rgba(255,59,48,0);
+    transition: box-shadow 400ms ease-out;
   }
-  .finder.heavy::after { box-shadow: inset 0 0 0 2px rgba(255,59,48,.45); }
-  .finder.full::after { box-shadow: inset 0 0 0 3px rgba(255,59,48,.9); }
-  .finder.pulse::after { animation: redpulse 900ms ease-out; }
-  @keyframes redpulse {
-    0%, 60% { box-shadow: inset 0 0 0 4px rgba(255,59,48,1), inset 0 0 36px rgba(255,59,48,.55); }
-    30% { box-shadow: inset 0 0 0 3px rgba(255,59,48,.5), inset 0 0 12px rgba(255,59,48,.2); }
+  .finder.warn { animation: redthrob 1.1s ease-in-out infinite; }
+  .finder.warn::after { animation: redthrob-in 1.1s ease-in-out infinite; }
+  .finder.hot, .finder.full { box-shadow: 0 0 22px 4px rgba(255,59,48,.75), 0 0 0 2px rgba(255,59,48,.95); }
+  .finder.hot::after, .finder.full::after { box-shadow: inset 0 0 28px rgba(255,59,48,.5); }
+  .finder.full.pulse::after { animation: redtint 650ms ease-out; }
+  @keyframes redthrob {
+    0%, 100% { box-shadow: 0 0 4px 0 rgba(255,59,48,.25), 0 0 0 1px rgba(255,59,48,.4); }
+    50% { box-shadow: 0 0 24px 5px rgba(255,59,48,.8), 0 0 0 2px rgba(255,59,48,.95); }
   }
-  @media (prefers-reduced-motion: reduce) { .finder.pulse::after { animation: none; } }
+  @keyframes redthrob-in {
+    0%, 100% { box-shadow: inset 0 0 0 0 rgba(255,59,48,0); }
+    50% { box-shadow: inset 0 0 30px rgba(255,59,48,.45); }
+  }
+  @keyframes redtint {
+    0% { background: rgba(255,40,30,.55); }
+    100% { background: rgba(255,40,30,0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .finder.warn, .finder.warn::after { animation: none; }
+    .finder.warn { box-shadow: 0 0 14px 2px rgba(255,59,48,.6), 0 0 0 2px rgba(255,59,48,.9); }
+  }
 
   /* one lens button beside the shutter: tap cycles lenses (or zoom steps), slide on the viewfinder for anything between */
   /* each side: outer slot at the edge, inner control centred between it and the shutter */
@@ -171,17 +186,16 @@
     transition: opacity 200ms ease;
   }
   .onion.on { opacity: .5; }
-  /* checkbox look, so it can't be mistaken for the round "make gif" check */
+  /* overlay toggle: same round glass as the lens button, stacked-photos icon, yellow when on */
   .ghostbtn {
-    width: 34px; height: 34px; border-radius: 10px;
+    width: var(--ctl); height: var(--ctl); border-radius: 50%;
     display: grid; place-items: center;
-    border: 2px solid rgba(255,255,255,.7); color: transparent;
-    transition: transform 160ms var(--ease-out), background-color 200ms ease, border-color 200ms ease, color 200ms ease, opacity 200ms ease;
+    background: var(--glass); color: rgba(255,255,255,.85);
+    transition: transform 160ms var(--ease-out), background-color 200ms ease, color 200ms ease;
   }
-  .ghostbtn svg { width: 18px; height: 18px; }
-  .ghostbtn:active { transform: scale(0.9); }
-  .ghostbtn[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #000; }
-  .ghostbtn[hidden] { display: grid; opacity: 0; pointer-events: none; }
+  .ghostbtn svg { width: 22px; height: 22px; }
+  .ghostbtn:active { transform: scale(0.92); }
+  .ghostbtn[aria-pressed=true] { background: var(--accent); color: #000; }
   .flash {
     position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none;
     transition: opacity 260ms var(--ease-out);
@@ -464,7 +478,7 @@
     <li><b>tap, then hold</b> to film: every frame, like a video</li>
     <li><b>slide up or down</b> on the picture to zoom</li>
     <li><b>⚡</b> top left, when your phone allows it: flashlight, or a screen flash on the selfie camera</li>
-    <li><b>the box</b> by the shutter overlays your last photo, to line up the next</li>
+    <li><b>the stacked squares</b> by the shutter overlay your last photo, to line up the next. set it before you start if you like</li>
     <li><b>tap the pile</b> of photos to start over</li>
     <li><b>✓</b> when you have two or more: make the GIF, then save it to Photos</li>
     <li><b>double-tap the GIF</b> to trim it: drag the yellow edges, then <b>Done</b></li>
@@ -519,8 +533,8 @@
     </div>
     <button class="shutter" id="shutter" aria-label="Take photo" disabled><i></i></button>
     <div class="rightcell">
-      <button class="ghostbtn" id="ghostBtn" aria-pressed="false" aria-label="Overlay last photo" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      <button class="ghostbtn" id="ghostBtn" aria-pressed="false" aria-label="Overlay last photo" title="Overlay last photo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2.5" stroke-dasharray="2.4 2.2" opacity=".75"/><rect x="8" y="8" width="13" height="13" rx="2.5"/></svg>
       </button>
       <div class="side" id="side">
       <button class="flip" id="flip" aria-label="Switch camera">
@@ -604,7 +618,7 @@ import { GIFEncoder, quantize, applyPalette } from 'https://unpkg.com/gifenc@1.0
 
 const $ = (id) => document.getElementById(id);
 const video = $('video'), shutter = $('shutter'), side = $('side');
-const MAX_SHOTS = 200, WARN_SHOTS = 100; // shots live as ~100KB jpegs, not 1.2MB canvases, so 200 fits
+const MAX_SHOTS = 200, WARN_SHOTS = 100, HOT_SHOTS = 150; // shots live as ~100KB jpegs, not 1.2MB canvases, so 200 fits
 const CAP_LONG = 640, CAP_SHORT = 480; // stored frame size, 4:3 either way up
 const DIGITAL_MAX = 5;
 const landscapeMQ = matchMedia('(orientation: landscape)');
@@ -998,7 +1012,6 @@ landscapeMQ.addEventListener?.('change', syncAspect);
 function renderGhost() {
   const last = state.shots[state.shots.length - 1];
   const g = $('ghost'), btn = $('ghostBtn');
-  btn.hidden = !last;
   btn.setAttribute('aria-pressed', state.ghost);
   if (last) g.src = last.thumb;
   g.classList.toggle('on', !!last && state.ghost);
@@ -1107,7 +1120,7 @@ function snap() {
 function addShot(c, quiet) {
   if (!c) return false;
   state.shots.push(c); state.ver++;
-  if (state.shots.length === WARN_SHOTS || state.shots.length === MAX_SHOTS) pulseFinder();
+  if (state.shots.length === MAX_SHOTS) pulseFinder();
   const f = $('flash');
   if (!quiet) {
     f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
@@ -1143,10 +1156,11 @@ function pulseFinder() {
   const f = $('finder');
   f.classList.remove('pulse'); void f.offsetWidth; f.classList.add('pulse');
 }
-$('finder').addEventListener('animationend', (e) => { if (e.animationName === 'redpulse') e.currentTarget.classList.remove('pulse'); });
+$('finder').addEventListener('animationend', (e) => { if (e.animationName === 'redtint') e.currentTarget.classList.remove('pulse'); });
 function renderCount() {
   const n = state.shots.length, cnt = $('count');
-  $('finder').classList.toggle('heavy', n >= WARN_SHOTS && n < MAX_SHOTS);
+  $('finder').classList.toggle('warn', n >= WARN_SHOTS && n < HOT_SHOTS);
+  $('finder').classList.toggle('hot', n >= HOT_SHOTS && n < MAX_SHOTS);
   $('finder').classList.toggle('full', n >= MAX_SHOTS);
   cnt.textContent = n;
   cnt.classList.toggle('empty', n === 0);
