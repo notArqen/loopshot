@@ -72,17 +72,19 @@
   .chip svg { width: 18px; height: 18px; }
   .chip[hidden] { display: inline-flex; opacity: 0; pointer-events: none; }
   .brand { font-weight: 700; letter-spacing: -.01em; font-size: 17px; }
-  /* the logo is the rolls button: tap it for saved shoots */
-  button.brand {
-    display: grid; justify-items: center; gap: 1px; padding: 4px 12px; border-radius: 14px;
-    transition: transform 160ms var(--ease-out), background-color 200ms ease;
-  }
-  button.brand:active { transform: scale(0.96); background: var(--glass); }
-  .brand .line { display: inline-flex; align-items: center; gap: 5px; }
-  .brand .rollico { width: 15px; height: 15px; opacity: .55; }
-  .brand .rollname { font-size: 11px; font-weight: 600; color: var(--dim); letter-spacing: 0; display: inline-flex; align-items: center; gap: 4px; }
-  .brand .rollname:empty { display: none; }
-  .brand .rollname::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  /* the logo opens the saved rolls (chevron once there are any); the save button hangs off its right edge so the logo stays centred */
+  .brandwrap { position: relative; display: grid; place-items: center; }
+  button.brand { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 14px; transition: transform 160ms var(--ease-out), background-color 200ms ease; }
+  button.brand:disabled { cursor: default; }
+  button.brand:not(:disabled):active { transform: scale(0.96); background: var(--glass); }
+  .brand .chev { width: 14px; height: 14px; opacity: .55; display: none; }
+  button.brand:not(:disabled) .chev { display: block; }
+  .rollsave { position: absolute; left: calc(100% + 4px); top: 50%; translate: 0 -50%; height: 32px; min-width: 32px; padding: 0 9px; transition: transform 160ms var(--ease-out), opacity 200ms ease, background-color 200ms ease, color 200ms ease; }
+  .rollsave svg { width: 17px; height: 17px; }
+  .rollsave .ok { display: none; }
+  .rollsave.live { background: var(--accent); color: #000; }
+  .rollsave.live .ok { display: block; }
+  .rollsave.live .add { display: none; }
 
   /* rolls drawer: drops from the top, under the logo that opened it */
   .drawer {
@@ -486,8 +488,10 @@
   @media (orientation: landscape) and (max-height: 600px) {
     #app { grid-template-rows: 1fr; grid-template-columns: 44px 1fr 96px; column-gap: 12px; padding-top: calc(var(--sat) + 12px); padding-bottom: calc(var(--sab) + 12px); }
     #app > .top { flex-direction: column; height: auto; width: 44px; }
-    #app > .top .brand .word, #app > .top .brand .rollname { display: none; }
-    #app > .top .brand .rollico { opacity: .85; width: 20px; height: 20px; }
+    #app > .top .brand > span, #app > .top button.brand:disabled { display: none; }
+    #app > .top .brand .chev { width: 20px; height: 20px; opacity: .85; }
+    #app > .top .brandwrap { display: contents; }
+    #app > .top .rollsave { position: static; translate: none; height: 36px; }
     .bar { height: auto; padding: 0; grid-template-columns: 1fr; grid-template-rows: 1fr auto 1fr; justify-items: center; }
     .rightcell { grid-row: 1; align-self: stretch; grid-template-columns: none; grid-template-rows: var(--edge) 1fr; }
     .rightcell > .side { grid-row: 1; }
@@ -542,7 +546,7 @@
     <li><b>hold</b> it for a burst</li>
     <li><b>tap, then hold</b> to film: every frame, like a video</li>
     <li><b>slide up or down</b> on the picture to zoom</li>
-    <li><b>tap the logo</b> to save a shoot and pick it up later, like one photo every hour</li>
+    <li><b>the bookmark</b> next to the logo saves your shoot as you go, so you can close the app and come back (one photo an hour, say). <b>tap the logo</b> to open saved ones</li>
     <li><b>⚡</b> top left, when your phone allows it: flashlight, or a screen flash on the selfie camera</li>
     <li><b>the stacked squares</b> by the shutter overlay your last photo, to line up the next. set it before you start if you like</li>
     <li><b>tap the pile</b> of photos to start over</li>
@@ -557,10 +561,16 @@
     <button class="chip" id="flashBtn" aria-label="Flash" aria-pressed="false" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z"/></svg>
     </button>
-    <button class="brand" id="rollsBtn" aria-label="Saved rolls" aria-haspopup="dialog">
-      <span class="line"><span class="word">loop<b>shot</b></span><svg class="rollico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
-      <span class="rollname" id="rollName"></span>
-    </button>
+    <div class="brandwrap">
+      <button class="brand" id="rollsBtn" aria-label="Saved rolls" aria-haspopup="dialog" disabled>
+        <span>loop<b>shot</b></span>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <button class="chip rollsave" id="rollSaveBtn" aria-label="Save this shoot" hidden>
+        <svg class="add" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>
+        <svg class="ok" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>
+      </button>
+    </div>
     <div class="slot">
       <button class="chip" id="info" aria-label="How it works">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/></svg>
@@ -1245,6 +1255,7 @@ function renderCount() {
   $('upload').hidden = n > 0;
   $('undo').hidden = n === 0;
   $('info').hidden = n > 0;
+  renderRollName();
   $('hint').style.opacity = n >= 2 ? 0 : 1;
   $('hint').textContent = n === 1 ? 'one more' : 'take at least 2';
 }
@@ -1319,11 +1330,20 @@ function detachRoll() {
   roll.id = null; roll.stored = new Set();
   renderRollName();
 }
-function renderRollName() { $('rollName').textContent = roll.id ? roll.name : ''; }
+// logo opens the list once anything's saved; the bookmark beside it saves this shoot (filled = saving as you go)
+let savedRolls = 0;
+function renderRollName() {
+  $('rollsBtn').disabled = !savedRolls;
+  const b = $('rollSaveBtn');
+  b.hidden = !state.shots.length && !roll.id;
+  b.classList.toggle('live', !!roll.id);
+  b.setAttribute('aria-label', roll.id ? `Saving to ${roll.name}` : 'Save this shoot');
+}
 
 async function listRolls() {
   const db = await openRollsDB();
   const all = await idb(db.transaction('rolls').objectStore('rolls').getAll());
+  savedRolls = all.length; renderRollName();
   return all.sort((a, b) => b.updated - a.updated);
 }
 async function saveNewRoll() {
@@ -1417,7 +1437,15 @@ async function renderRolls() {
     li.append(open, del); list.append(li);
   }
 }
-$('rollsBtn').addEventListener('click', () => { renderRolls(); $('rolls').showModal(); });
+const openRolls = () => { renderRolls(); $('rolls').showModal(); };
+$('rollsBtn').addEventListener('click', openRolls);
+$('rollSaveBtn').addEventListener('click', async () => {
+  if (roll.id) return toast(`saving to ${roll.name} as you shoot`);
+  if (savedRolls >= MAX_ROLLS) return openRolls(); // the list says to delete one first
+  await saveNewRoll();
+  toast(`saved as ${roll.name}. it keeps saving as you shoot`);
+});
+listRolls().catch(() => {}); // only to learn whether the button should show at launch
 // tap the dimmed area under the drawer to close it
 $('rolls').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 // closing the app right after a shot shouldn't lose it
